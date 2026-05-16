@@ -1,0 +1,11 @@
+[package]
+name = "kinematics-embed"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nalgebra = { version = "0.34.2", default-features = false, features = ["libm"] }
+defmt = { version = "1.0.1", optional = true }
+
+[features]
+defmt = ["dep:defmt"]
