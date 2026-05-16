@@ -3,13 +3,7 @@
 A `no_std` robot kinematics library for bare-metal embedded systems, built on
 [nalgebra](https://nalgebra.org) and largely ispired by [k](https://crates.io/crates/k) crate from openrr collection.
 
-Provides forward kinematics and geometric Jacobian computation for serial-chain
-robot arms with a fully static memory layout — no heap, no allocator. 
-
-```toml
-[dependencies]
-kinema = "0.1"
-```
+Provides forward kinematics and geometric Jacobian computation for serial-chain robot arms with a fully static memory layout. 
 
 ## Features
 
