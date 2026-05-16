@@ -2,6 +2,9 @@
 name = "kinematics-embed"
 version = "0.1.0"
 edition = "2024"
+license = "GNU AGPLv3"
+repository = "https://github.com/RattlingJester/kinema.git"
+keywords = ["kinematics", "embedded"]
 
 [dependencies]
 nalgebra = { version = "0.34.2", default-features = false, features = ["libm"] }
