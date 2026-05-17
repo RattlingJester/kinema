@@ -1,4 +1,4 @@
-use core::time::Duration;
+use core::{num::NonZeroU8, time::Duration};
 
 use nalgebra::RealField;
 use simba::scalar::SubsetOf;
@@ -39,6 +39,7 @@ impl<T: RealField + SubsetOf<f64>> Default for TrapProfile<T> {
 }
 
 impl<T: RealField + SubsetOf<f64> + Copy> TrapProfile<T> {
+	/// Compute a profile given physical acceleration `a` [rad/s^2].
 	fn compute(start: T, end: T, v_max: T, a: T) -> Self {
 		let delta = (end - start).abs();
 
@@ -104,13 +105,17 @@ impl<T: RealField + SubsetOf<f64> + Copy> TrapProfile<T> {
 impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
 	Chain<DOF, JOINTS, T>
 {
-	pub fn jplan_trap(&self, goal: &[T], acc: T) -> Trajectory<DOF, T> {
+	/// Synchronized joint-space trapezoidal trajectory.
+	/// speed is defined as a fraction of max defined for Chain `(0.0..1.0)`
+	/// acc is `rad/s^2`
+	pub fn jplan_trap(&self, goal: &[T], speed: T, acc: T) -> Trajectory<DOF, T> {
 		let start = self.joints_positions();
 
 		let mut profiles: [TrapProfile<T>; DOF] = core::array::from_fn(|_| TrapProfile::default());
 
 		for (i, _, node) in self.iter_movable() {
-			profiles[i] = TrapProfile::compute(start[i], goal[i], node.joint.limits.velocity, acc);
+			profiles[i] =
+				TrapProfile::compute(start[i], goal[i], node.joint.limits.velocity * speed, acc);
 		}
 
 		let duration = profiles
