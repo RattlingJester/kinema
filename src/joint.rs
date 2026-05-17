@@ -1,5 +1,6 @@
 use nalgebra::{Isometry3, RealField, Translation3, Unit, UnitQuaternion, Vector3};
 
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug, Default)]
 pub struct JointLimit<T: RealField> {
 	/// Radians
@@ -12,6 +13,7 @@ pub struct JointLimit<T: RealField> {
 	pub effort:   T,
 }
 
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug, PartialEq)]
 pub enum JointType<T: RealField> {
 	Fixed,
@@ -19,6 +21,7 @@ pub enum JointType<T: RealField> {
 	Prismatic { axis: Unit<Vector3<T>> },
 }
 
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug)]
 pub struct Joint<T: RealField> {
 	pub name:       &'static str,

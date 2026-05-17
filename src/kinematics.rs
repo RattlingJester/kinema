@@ -8,6 +8,8 @@ use crate::{
 
 /// DOF   = number of movable joints
 /// JOINTS = DOF + 1 (root node counts too)
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Debug)]
 pub struct Chain<const DOF: usize, const JOINTS: usize, T: RealField> {
 	pub nodes:     [Node<T>; JOINTS],
 	movable_nodes: [NodeIDx; DOF],
@@ -87,5 +89,16 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField> Chain<DOF, JOINTS, T> 
 				JointType::Fixed => panic!("fixed joint in movable_nodes — bug in Chain::new()"),
 			}
 		})
+	}
+
+	pub fn iter(&self) -> impl Iterator<Item = (NodeIDx, &Node<T>)> {
+		self.nodes.iter().enumerate()
+	}
+
+	pub fn iter_movable(&self) -> impl Iterator<Item = (usize, NodeIDx, &Node<T>)> {
+		self.movable_nodes
+			.iter()
+			.enumerate()
+			.map(|(dof_idx, &id)| (dof_idx, id, &self.nodes[id]))
 	}
 }

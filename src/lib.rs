@@ -11,5 +11,5 @@ pub use nalgebra::{Isometry3, SMatrix, Translation3, Unit, UnitQuaternion, Vecto
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug)]
 pub enum Error {
-    SizeMismatch { provided: usize, expected: usize },
+	SizeMismatch { provided: usize, expected: usize },
 }

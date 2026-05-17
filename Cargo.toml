@@ -9,8 +9,10 @@ repository = "https://github.com/RattlingJester/kinema.git"
 keywords = ["kinematics", "embedded"]
 
 [dependencies]
-nalgebra = { version = "0.34.2", default-features = false, features = ["libm"] }
 defmt = { version = "1.0.1", optional = true }
+
+nalgebra = { version = "0.34.2", default-features = false, features = ["libm"] }
+simba = { version = "0.9.1", default-features = false, features = ["libm"] }
 
 [features]
 defmt = ["dep:defmt"]
