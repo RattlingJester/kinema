@@ -1,4 +1,4 @@
-use core::{num::NonZeroU8, time::Duration};
+use core::time::Duration;
 
 use nalgebra::RealField;
 use simba::scalar::SubsetOf;
