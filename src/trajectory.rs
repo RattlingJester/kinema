@@ -20,9 +20,9 @@ pub struct TrapProfile<T: RealField + SubsetOf<f64>> {
 	pub start:    T,        // rad   — starting position
 	pub end:      T,        // rad   — target position
 	pub v_peak:   T,        // rad/s — cruise speed (or triangle apex if t_cruise == 0)
-	pub t_ramp:   T,        // s     — acceleration phase
-	pub t_cruise: T,        // s     — constant-velocity phase; 0 for triangular profiles
-	pub duration: Duration, // s     — total: 2 * t_ramp + t_cruise
+	pub t_ramp:   Duration, // — acceleration phase
+	pub t_cruise: Duration, // — constant-velocity phase; 0 for triangular profiles
+	pub duration: Duration, // — total: 2 * t_ramp + t_cruise
 }
 
 impl<T: RealField + SubsetOf<f64>> Default for TrapProfile<T> {
@@ -31,8 +31,8 @@ impl<T: RealField + SubsetOf<f64>> Default for TrapProfile<T> {
 			start:    T::zero(),
 			end:      T::zero(),
 			v_peak:   T::zero(),
-			t_ramp:   T::zero(),
-			t_cruise: T::zero(),
+			t_ramp:   Duration::ZERO,
+			t_cruise: Duration::ZERO,
 			duration: Duration::ZERO,
 		}
 	}
@@ -61,8 +61,8 @@ impl<T: RealField + SubsetOf<f64> + Copy> TrapProfile<T> {
 				start,
 				end,
 				v_peak,
-				t_ramp,
-				t_cruise: T::zero(),
+				t_ramp: Duration::from_secs_f64(nalgebra::convert(t_ramp)),
+				t_cruise: Duration::ZERO,
 				duration: Duration::from_secs_f64(nalgebra::convert(two * t_ramp)),
 			}
 		} else {
@@ -72,8 +72,8 @@ impl<T: RealField + SubsetOf<f64> + Copy> TrapProfile<T> {
 				start,
 				end,
 				v_peak: v_max,
-				t_ramp,
-				t_cruise,
+				t_ramp: Duration::from_secs_f64(nalgebra::convert(t_ramp)),
+				t_cruise: Duration::from_secs_f64(nalgebra::convert(t_cruise)),
 				duration: Duration::from_secs_f64(nalgebra::convert(two * t_ramp + t_cruise)),
 			}
 		}
