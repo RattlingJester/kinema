@@ -1,6 +1,6 @@
 use core::time::Duration;
 
-use nalgebra::RealField;
+use nalgebra::{RealField, SVector};
 use simba::scalar::SubsetOf;
 
 use crate::kinematics::Chain;
@@ -9,96 +9,133 @@ use crate::kinematics::Chain;
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug)]
 pub struct Trajectory<const DOF: usize, T: RealField + SubsetOf<f64>> {
-	pub profiles: [TrapProfile<T>; DOF],
+	pub profile:  TrapProfile<DOF, T>,
 	pub duration: Duration,
 }
 
-/// Trapezoidal velocity profile for a single joint.
+/// Trapezoidal velocity profile for a multi joint move.
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Debug, Clone, Copy)]
-pub struct TrapProfile<T: RealField + SubsetOf<f64>> {
-	pub start:    T,        // rad   — starting position
-	pub end:      T,        // rad   — target position
-	pub v_peak:   T,        // rad/s — cruise speed (or triangle apex if t_cruise == 0)
-	pub t_ramp:   Duration, // — acceleration phase
-	pub t_cruise: Duration, // — constant-velocity phase; 0 for triangular profiles
-	pub duration: Duration, // — total: 2 * t_ramp + t_cruise
+#[derive(Debug, Clone)]
+pub struct TrapProfile<const DOF: usize, T: RealField + SubsetOf<f64>> {
+	pub start:    SVector<T, DOF>, // rad   — starting position
+	pub end:      SVector<T, DOF>, // rad   — target position
+	pub v_peak:   SVector<T, DOF>, // rad/s — cruise speed (or triangle apex if t_cruise == 0)
+	pub t_ramp:   [Duration; DOF], // — acceleration phase
+	pub t_cruise: [Duration; DOF], // — constant-velocity phase; 0 for triangular profiles
+	pub duration: [Duration; DOF], // — total: 2 * t_ramp + t_cruise
 }
 
-impl<T: RealField + SubsetOf<f64>> Default for TrapProfile<T> {
+impl<const DOF: usize, T: RealField + SubsetOf<f64> + Copy> Default for TrapProfile<DOF, T> {
 	fn default() -> Self {
 		Self {
-			start:    T::zero(),
-			end:      T::zero(),
-			v_peak:   T::zero(),
-			t_ramp:   Duration::ZERO,
-			t_cruise: Duration::ZERO,
-			duration: Duration::ZERO,
+			start:    SVector::<T, DOF>::zeros(),
+			end:      SVector::<T, DOF>::zeros(),
+			v_peak:   SVector::<T, DOF>::zeros(),
+			t_ramp:   [Duration::ZERO; DOF],
+			t_cruise: [Duration::ZERO; DOF],
+			duration: [Duration::ZERO; DOF],
 		}
 	}
 }
 
-impl<T: RealField + SubsetOf<f64> + Copy> TrapProfile<T> {
-	/// Compute a profile given physical acceleration `a` [rad/s^2].
-	fn compute(start: T, end: T, v_max: T, a: T) -> Self {
-		let delta = (end - start).abs();
+impl<const DOF: usize, T: RealField + SubsetOf<f64> + Copy> TrapProfile<DOF, T> {
+	/// Compute a profile given:
+	/// `v_max` - max cruise angular velocity [rad/s]
+	/// `a` - acceleration [rad/s^2]
+	fn compute(start: SVector<T, DOF>, end: SVector<T, DOF>, v_max: T, a: T) -> Self {
+		let mut p = Self::default();
 
-		// Yeah, funny
-		let two: T = nalgebra::convert(2.0);
+		let deltas = end - start;
+		p.start = start;
+		p.end = end;
 
-		if delta <= nalgebra::convert(f64::EPSILON) || v_max <= nalgebra::convert(f64::EPSILON) {
-			return Self::default();
-		}
+		// First pass:
+		// compute minimal-time profile for each joint independently
+		let mut sync_time = T::zero();
 
-		// Accel distance: d = v^2 / (2 * a)
-		let d_ramp = v_max * v_max / (two * a);
-		if two * d_ramp >= delta {
-			// Triangular profile
-			// sigma = v_peak^2 / a  →  v_peak = sqrt(a * sigma)
-			let v_peak = (a * delta).sqrt();
-			let t_ramp = v_peak / a;
-			Self {
-				start,
-				end,
-				v_peak,
-				t_ramp: Duration::from_secs_f64(nalgebra::convert(t_ramp)),
-				t_cruise: Duration::ZERO,
-				duration: Duration::from_secs_f64(nalgebra::convert(two * t_ramp)),
+		for i in 0..DOF {
+			let d = deltas[i].abs();
+
+			let d_ramp = (v_max * v_max) / a;
+
+			let (v_peak, t_ramp, t_cruise, t_total) = if d <= d_ramp {
+				// Triangular profile
+				let vp = (d * a).sqrt();
+				let tr = vp / a;
+				let tc = T::zero();
+				let tt = tr + tr;
+
+				(vp, tr, tc, tt)
+			} else {
+				// Trapezoidal profile
+				let tr = v_max / a;
+				let dc = d - d_ramp;
+				let tc = dc / v_max;
+				let tt = tr + tc + tr;
+
+				(v_max, tr, tc, tt)
+			};
+
+			let sign = deltas[i].signum();
+
+			p.v_peak[i] = v_peak * sign;
+
+			p.t_ramp[i] = Duration::from_secs_f64(nalgebra::convert(t_ramp));
+			p.t_cruise[i] = Duration::from_secs_f64(nalgebra::convert(t_cruise));
+			p.duration[i] = Duration::from_secs_f64(nalgebra::convert(t_total));
+
+			if t_total > sync_time {
+				sync_time = t_total;
 			}
-		} else {
-			let t_ramp = v_max / a;
-			let t_cruise = (delta - two * d_ramp) / v_max;
-			Self {
-				start,
-				end,
-				v_peak: v_max,
-				t_ramp: Duration::from_secs_f64(nalgebra::convert(t_ramp)),
-				t_cruise: Duration::from_secs_f64(nalgebra::convert(t_cruise)),
-				duration: Duration::from_secs_f64(nalgebra::convert(two * t_ramp + t_cruise)),
+		}
+
+		// Second pass:
+		// stretch faster joints to match sync_time
+		for i in 0..DOF {
+			let d_signed = deltas[i];
+
+			if d_signed == T::zero() {
+				continue;
 			}
+
+			let d = d_signed.abs();
+			let sign = d_signed.signum();
+
+			// Solve:
+			//
+			// d = v*t_cruise + v^2/a
+			// T = 2v/a + t_cruise
+			//
+			// eliminating t_cruise:
+			//
+			// d = v*T - v^2/a
+			//
+			// quadratic:
+			//
+			// v^2 - a*T*v + a*d = 0
+
+			let b = -(a * sync_time);
+			let c = a * d;
+
+			let discriminant = b * b - T::from_f64(4.0).unwrap() * c;
+
+			let sqrt_disc = discriminant.sqrt();
+
+			let v = (-b - sqrt_disc) / T::from_f64(2.0).unwrap();
+
+			let t_ramp = v / a;
+			let t_cruise = sync_time - t_ramp - t_ramp;
+
+			p.v_peak[i] = v * sign;
+
+			p.t_ramp[i] = Duration::from_secs_f64(nalgebra::convert(t_ramp));
+
+			p.t_cruise[i] = Duration::from_secs_f64(nalgebra::convert(t_cruise.max(T::zero())));
+
+			p.duration[i] = Duration::from_secs_f64(nalgebra::convert(sync_time));
 		}
-	}
 
-	/// Re-plan to fill exactly `target` time by lowering cruise speed.
-	/// Closed-form: T = v/a + sigma/v  →  v^2 − T * a * v + a * sigma = 0
-	/// Smaller root: v = a * (T − sqrt(T^2 − 4 * sigma / a)) / 2
-	fn constrain_to(self, target: Duration, a: T) -> Self {
-		let delta = (self.end - self.start).abs();
-
-		// Already constrained or no move
-		if self.duration >= target || delta <= nalgebra::convert(f64::EPSILON) {
-			return self;
-		}
-
-		// Yeah, funny
-		let two: T = nalgebra::convert(2.0);
-		let four: T = nalgebra::convert(4.0);
-
-		let target: T = nalgebra::convert(target.as_secs_f64());
-
-		let discriminant = (target * target - four * delta / a).max(T::zero());
-		let v = a * (target - (discriminant).sqrt()) / two;
-		Self::compute(self.start, self.end, v.max(T::zero()), a)
+		p
 	}
 }
 
@@ -108,26 +145,22 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
 	/// Synchronized joint-space trapezoidal trajectory.
 	/// speed is defined as a fraction of max defined for Chain `(0.0..1.0)`
 	/// acc is `rad/s^2`
-	pub fn jplan_trap(&self, goal: &[T], speed: T, acc: T) -> Trajectory<DOF, T> {
+	pub fn jplan_trap(&self, goal: SVector<T, DOF>, speed: T, acc: T) -> Trajectory<DOF, T> {
 		let start = self.joints_positions();
 
-		let mut profiles: [TrapProfile<T>; DOF] = core::array::from_fn(|_| TrapProfile::default());
+		let v_limit = self
+			.iter_movable()
+			.map(|(_, _, node)| node.joint.limits.velocity)
+			.fold(T::zero(), |a, b| a.max(b))
+			* speed;
 
-		for (i, _, node) in self.iter_movable() {
-			profiles[i] =
-				TrapProfile::compute(start[i], goal[i], node.joint.limits.velocity * speed, acc);
-		}
+		let profile = TrapProfile::compute(start, goal, v_limit, acc);
 
-		let duration = profiles
+		let duration = profile
+			.duration
 			.iter()
-			.map(|p| p.duration)
-			.max()
-			.unwrap_or(Duration::ZERO);
+			.fold(Duration::ZERO, |m, &p| m.max(p));
 
-		for p in &mut profiles {
-			*p = p.constrain_to(duration, acc);
-		}
-
-		Trajectory { profiles, duration }
+		Trajectory { profile, duration }
 	}
 }

@@ -11,7 +11,7 @@ use crate::{
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug)]
 pub struct Chain<const DOF: usize, const JOINTS: usize, T: RealField> {
-	pub nodes:     [Node<T>; JOINTS],
+	nodes:         [Node<T>; JOINTS],
 	movable_nodes: [NodeIDx; DOF],
 }
 
@@ -31,7 +31,7 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField> Chain<DOF, JOINTS, T> 
 		SVector::from_fn(|i, _| self.nodes[self.movable_nodes[i]].joint.pos.clone())
 	}
 
-	pub fn set_joints_positions(&mut self, pos: &[T]) -> Result<(), Error> {
+	pub fn set_joints_positions(&mut self, pos: SVector<T, DOF>) -> Result<(), Error> {
 		if pos.len() > DOF {
 			return Err(Error::SizeMismatch {
 				provided: pos.len(),

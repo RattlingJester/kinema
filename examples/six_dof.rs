@@ -1,3 +1,16 @@
+use std::f32::consts::{FRAC_PI_2, TAU};
+
+use kinema::{
+	Isometry3, Translation3, Unit, UnitQuaternion, Vector3,
+	joint::{Joint, JointLimit, JointType},
+	kinematics::Chain,
+	node::Node,
+};
+
+fn main() {
+	let _chain = robot_chain();
+}
+
 pub fn robot_chain() -> Chain<6, 7, f32> {
 	// Isometry from URDF <origin xyz rpy>
 	let iso = |x, y, z, roll, pitch, yaw| {
@@ -47,7 +60,7 @@ pub fn robot_chain() -> Chain<6, 7, f32> {
 	//    origin  xyz="0 0 0.212"   rpy="0 0 0"
 	//    limits  -180..180 deg  30 Nm  31.41 rad/s
 	let j1 = Node {
-		parent:          Some(NodeIDx(0)),
+		parent:          Some(0),
 		joint:           Joint {
 			name:       "joint_1",
 			joint_type: revolute_z(),
@@ -62,12 +75,12 @@ pub fn robot_chain() -> Chain<6, 7, f32> {
 	//    origin  xyz="0.071 0 0.08003"   rpy="π/2 0 0"
 	//    limits  -145..90 deg  25 Nm  6.28 rad/s
 	let j2 = Node {
-		parent:          Some(NodeIDx(1)),
+		parent:          Some(1),
 		joint:           Joint {
 			name:       "joint_2",
 			joint_type: revolute_z(),
 			pos:        0.0,
-			limits:     deg_lim(-145.0, 90.0, 25.0, 6.28),
+			limits:     deg_lim(-145.0, 90.0, 25.0, TAU),
 			origin:     iso(0.071, 0.0, 0.080_030, FRAC_PI_2, 0.0, 0.0),
 		},
 		world_transform: identity(),
@@ -77,12 +90,12 @@ pub fn robot_chain() -> Chain<6, 7, f32> {
 	//    origin  xyz="0 0.290 0"   rpy="0 0 0"
 	//    limits  -65..145 deg  1000 Nm  6.28 rad/s
 	let j3 = Node {
-		parent:          Some(NodeIDx(2)),
+		parent:          Some(2),
 		joint:           Joint {
 			name:       "joint_3",
 			joint_type: revolute_z(),
 			pos:        0.0,
-			limits:     deg_lim(-65.0, 145.0, 1_000.0, 6.28),
+			limits:     deg_lim(-65.0, 145.0, 1_000.0, TAU),
 			origin:     iso(0.0, 0.290, 0.0, 0.0, 0.0, 0.0),
 		},
 		world_transform: identity(),
@@ -92,7 +105,7 @@ pub fn robot_chain() -> Chain<6, 7, f32> {
 	//    origin  xyz="0 0 0"   rpy="0 π/2 0"
 	//    limits  -360..360 deg  2 Nm  11 rad/s
 	let j4 = Node {
-		parent:          Some(NodeIDx(3)),
+		parent:          Some(3),
 		joint:           Joint {
 			name:       "joint_4",
 			joint_type: revolute_z(),
@@ -107,7 +120,7 @@ pub fn robot_chain() -> Chain<6, 7, f32> {
 	//    origin  xyz="0 0 0.250"   rpy="0 -π/2 0"
 	//    limits  -90..90 deg  3.6 Nm  43.6 rad/s
 	let j5 = Node {
-		parent:          Some(NodeIDx(4)),
+		parent:          Some(4),
 		joint:           Joint {
 			name:       "joint_5",
 			joint_type: revolute_z(),
@@ -122,7 +135,7 @@ pub fn robot_chain() -> Chain<6, 7, f32> {
 	//    origin  xyz="0.059 0 0"   rpy="0 π/2 0"
 	//    limits  -360..360 deg  0.125 Nm  15.7 rad/s
 	let j6 = Node {
-		parent:          Some(NodeIDx(5)),
+		parent:          Some(5),
 		joint:           Joint {
 			name:       "joint_6",
 			joint_type: revolute_z(),
@@ -135,6 +148,6 @@ pub fn robot_chain() -> Chain<6, 7, f32> {
 
 	Chain::new(
 		[base, j1, j2, j3, j4, j5, j6],
-		core::array::from_fn(|i| NodeIDx(i + 1)), // movable = nodes 1-6
+		core::array::from_fn(|i| i + 1), // movable = nodes 1-6
 	)
 }
