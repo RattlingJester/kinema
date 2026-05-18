@@ -11,7 +11,7 @@ keywords = ["kinematics", "embedded"]
 [dependencies]
 defmt = { version = "1.0.1", optional = true }
 
-nalgebra = { version = "0.34.2", default-features = false, features = ["libm"] }
+nalgebra = { version = "0.34.2", default-features = false, features = ["libm", "defmt"] }
 simba = { version = "0.9.1", default-features = false, features = ["libm"] }
 
 [features]
