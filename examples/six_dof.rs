@@ -12,7 +12,6 @@ fn main() {
 }
 
 pub fn robot_chain() -> Chain<6, 7, f32> {
-	// Isometry from URDF <origin xyz rpy>
 	let iso = |x, y, z, roll, pitch, yaw| {
 		Isometry3::from_parts(
 			Translation3::new(x, y, z),
@@ -20,12 +19,10 @@ pub fn robot_chain() -> Chain<6, 7, f32> {
 		)
 	};
 
-	// All joints share the URDF <axis xyz="0 0 1">
 	let revolute_z = || JointType::Revolute {
 		axis: Unit::new_normalize(Vector3::z()),
 	};
 
-	// Limits are in degrees in this URDF (non-standard but clear from values)
 	let deg_lim = |lo: f32, hi: f32, effort: f32, velocity: f32| JointLimit {
 		min: lo.to_radians(),
 		max: hi.to_radians(),
@@ -41,7 +38,7 @@ pub fn robot_chain() -> Chain<6, 7, f32> {
 	};
 	let identity = Isometry3::identity;
 
-	// ── nodes (must be in topological / parent-before-child order) ─────────────
+	// ── nodes must be in topological order ─────────────
 
 	//  0 · base_link — root, fixed
 	let base = Node {
