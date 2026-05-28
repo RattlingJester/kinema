@@ -10,9 +10,21 @@ keywords = ["kinematics", "embedded"]
 
 [dependencies]
 defmt = { version = "1.0.1", optional = true }
+urdf-rs = { version = "0.9.0", optional = true }
 
-nalgebra = { version = "0.34.2", default-features = false, features = ["libm", "defmt"] }
+heapless = { version = "0.9.3"}
+nalgebra = { version = "0.34.2", default-features = false, features = ["libm"] }
 simba = { version = "0.9.1", default-features = false, features = ["libm"] }
 
+thiserror = { version = "2.0.17", default-features = false }
+
 [features]
-defmt = ["dep:defmt"]
+default = []
+std = []
+defmt = ["dep:defmt", "heapless/defmt", "nalgebra/defmt"]
+urdf = ["dep:urdf-rs", "visuals"]
+visuals = ["std"]
+
+[[example]]
+name = "six_dof"
+# required-features = []

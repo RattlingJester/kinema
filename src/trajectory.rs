@@ -13,6 +13,36 @@ pub struct Trajectory<const DOF: usize, const JOINTS: usize, T: RealField + Subs
 	pub duration: Duration,
 }
 
+impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
+	Trajectory<DOF, JOINTS, T>
+{
+	pub fn sample(&self, t: T) -> SVector<T, DOF> {
+		let half = T::from_subset(&0.5_f64);
+		let two = T::from_subset(&2.0_f64);
+
+		let t_ramp = self.profile.t_ramp;
+		let t_cruise = self.profile.t_cruise;
+		let t_total = t_ramp * two + t_cruise;
+
+		let t = nalgebra::clamp(t, T::zero(), t_total);
+
+		let p0 = &self.profile.start;
+		let v_coast = &self.profile.v_coast;
+
+		let s: T = if t <= t_ramp {
+			half * t * t / t_ramp
+		} else if t <= t_ramp + t_cruise {
+			let tau = t - t_ramp;
+			half * t_ramp + tau
+		} else {
+			let tau = t - t_ramp - t_cruise;
+			half * t_ramp + t_cruise + tau - half * tau * tau / t_ramp
+		};
+
+		p0 + v_coast * s
+	}
+}
+
 /// Trapezoidal velocity profile for a multi joint move.
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug, Clone)]
@@ -51,9 +81,13 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
 		speed_frac: T,
 		a: T,
 	) -> Self {
-		let mut p = Self::default();
-		p.start = start;
-		p.end = end;
+		let mut p = TrapProfile {
+			start,
+			end,
+			v_coast: SVector::<T, DOF>::zeros(),
+			t_ramp: T::zero(),
+			t_cruise: T::zero(),
+		};
 
 		let distances = end - start;
 		let deltas = distances.abs();
@@ -125,9 +159,9 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
 impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
 	Chain<DOF, JOINTS, T>
 {
-	/// Synchronized joint-space trapezoidal trajectory.
-	///	speed is a fraction of max angular velocity for each joint in Chain `(0.0..1.0)`
-	///	acc is `rad/s^2`
+	///Synchronized joint-space trapezoidal trajectory.
+	///speed is a fraction of max angular velocity for each joint in Chain `(0.0..1.0)`
+	///acc is `rad/s^2`
 	pub fn jplan_trap(
 		&self,
 		goal: SVector<T, DOF>,
