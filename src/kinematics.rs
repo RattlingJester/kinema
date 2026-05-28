@@ -75,7 +75,6 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64>> Chain<
 				.map(|p| self.nodes[p].world_transform.clone())
 				.unwrap_or_else(Isometry3::identity);
 
-			// Split borrow: read joint fields before mutating world_transform
 			let local = self.nodes[i].joint.origin.clone() * self.nodes[i].joint.local_transform();
 
 			self.nodes[i].world_transform = parent_world * local;
