@@ -55,8 +55,6 @@ pub fn my_robot() -> Chain<6, 7, f32> {
 }
 ```
 
-See [`examples/six_dof.rs`](examples/six_dof.rs) for a complete 6-DOF arm.
-
 ## Usage
 
 ```rust

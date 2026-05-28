@@ -1,4 +1,5 @@
 use nalgebra::{Isometry3, RealField};
+use simba::scalar::SubsetOf;
 
 use crate::{kinematics::Chain, node::NodeIDx};
 
@@ -36,7 +37,9 @@ impl<const J: usize, T: RealField, F: Fn(&[T]) -> [T; J] + Send + Sync> Default
 	}
 }
 
-impl<const J: usize, T: RealField, F: Fn(&[T]) -> [T; J] + Send + Sync> JacobianIK<J, T, F> {
+impl<const J: usize, T: RealField + SubsetOf<f64>, F: Fn(&[T]) -> [T; J] + Send + Sync>
+	JacobianIK<J, T, F>
+{
 	pub fn new(
 		allowable_error_dist: T,
 		allowable_error_angle: T,

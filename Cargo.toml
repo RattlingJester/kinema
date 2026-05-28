@@ -24,7 +24,3 @@ std = []
 defmt = ["dep:defmt", "heapless/defmt", "nalgebra/defmt"]
 urdf = ["dep:urdf-rs", "visuals"]
 visuals = ["std"]
-
-[[example]]
-name = "six_dof"
-# required-features = []

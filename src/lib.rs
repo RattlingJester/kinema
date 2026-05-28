@@ -25,6 +25,7 @@ pub enum Error {
 	UnknownParentLink,
 	#[error("")]
 	UnsupportedJointType,
+	#[cfg(feature = "urdf")]
 	#[error("")]
 	UrdfError(#[from] urdf_rs::UrdfError),
 }

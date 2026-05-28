@@ -1,7 +1,6 @@
 use nalgebra::{Isometry3, RealField, SMatrix, SVector};
 #[cfg(feature = "urdf")]
 use nalgebra::{Translation3, Unit, UnitQuaternion, Vector3};
-#[cfg(feature = "urdf")]
 use simba::scalar::SubsetOf;
 
 use crate::{
