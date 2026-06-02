@@ -47,7 +47,7 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64>> Chain<
 		self.nodes[DOF].world_transform.clone()
 	}
 
-	pub fn joints_positions(&self) -> SVector<T, DOF> {
+	pub fn joint_positions(&self) -> SVector<T, DOF> {
 		SVector::from_fn(|i, _| self.nodes[self.movable_nodes[i]].joint.pos.clone())
 	}
 

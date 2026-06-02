@@ -168,7 +168,7 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
 		speed: T,
 		acc: T,
 	) -> Trajectory<DOF, JOINTS, T> {
-		let start = self.joints_positions();
+		let start = self.joint_positions();
 
 		let profile = TrapProfile::compute(self, start, goal, speed, acc);
 
