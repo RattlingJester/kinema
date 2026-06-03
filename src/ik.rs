@@ -176,9 +176,13 @@ impl<
 
 		let mut last_target_distance = None;
 
+		let mut ignored_joints = [0_usize; JOINTS];
+		for (count, joint) in constraints.ignored_joints.iter().flatten().enumerate() {
+			ignored_joints[count] = *joint;
+		}
+
 		for _ in 0..self.max_try {
-			let target_diff =
-				self.iteration(chain, target, op_space, &constraints.ignored_joints)?;
+			let target_diff = self.iteration(chain, target, op_space, &ignored_joints)?;
 			let (len_diff, rot_diff) = target_diff_to_len_rot_diff(&target_diff, op_space);
 			if len_diff.norm() < self.allowable_error_dist
 				&& rot_diff.norm() < self.allowable_error_angle
@@ -261,7 +265,21 @@ pub struct Constraints<const J: usize> {
 	pub rotation_x:     bool,
 	pub rotation_y:     bool,
 	pub rotation_z:     bool,
-	pub ignored_joints: [NodeIDx; J],
+	pub ignored_joints: [Option<NodeIDx>; J],
+}
+
+impl<const J: usize> Default for Constraints<J> {
+	fn default() -> Self {
+		Constraints {
+			position_x:     true,
+			position_y:     true,
+			position_z:     true,
+			rotation_x:     true,
+			rotation_y:     true,
+			rotation_z:     true,
+			ignored_joints: [None; J],
+		}
+	}
 }
 
 impl<const J: usize> Constraints<J> {
