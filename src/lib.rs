@@ -25,6 +25,14 @@ pub enum Error {
 	UnknownParentLink,
 	#[error("")]
 	UnsupportedJointType,
+	#[error("")]
+	MathError,
+	#[error("")]
+	IkNotConverged {
+		tries:    usize,
+		pos_diff: Vector3<f64>,
+		rot_diff: Vector3<f64>,
+	},
 	#[cfg(feature = "urdf")]
 	#[error("")]
 	UrdfError(#[from] urdf_rs::UrdfError),
