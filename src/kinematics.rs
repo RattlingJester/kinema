@@ -51,16 +51,19 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64>> Chain<
 		SVector::from_fn(|i, _| self.nodes[self.movable_nodes[i]].joint.pos.clone())
 	}
 
-	pub fn set_joints_positions(&mut self, pos: SVector<T, DOF>) -> Result<(), Error> {
-		if pos.len() > DOF {
-			return Err(Error::SizeMismatch {
-				provided: pos.len(),
-				expected: DOF,
-			});
-		}
-
+	pub fn set_joint_positions(&mut self, pos: SVector<T, DOF>) -> Result<(), Error> {
 		for (i, &idx) in self.movable_nodes.iter().enumerate() {
 			self.nodes[idx].joint.pos = pos[i].clone();
+		}
+
+		Ok(())
+	}
+
+	pub fn set_joint_positions_clamped(&mut self, pos: SVector<T, DOF>) -> Result<(), Error> {
+		for (i, &idx) in self.movable_nodes.iter().enumerate() {
+			let limits = &self.nodes[idx].joint.limits.clone();
+			self.nodes[idx].joint.pos =
+				nalgebra::clamp(pos[i].clone(), limits.min.clone(), limits.max.clone());
 		}
 
 		Ok(())
