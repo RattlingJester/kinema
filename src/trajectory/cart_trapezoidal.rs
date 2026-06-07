@@ -10,7 +10,7 @@ use crate::{
 /// Trapezoidal profile for interpolated cartesian move.
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug, Clone)]
-pub struct CartProfile<
+pub struct CartTrap<
 	const PATH_LEN: usize,
 	const DOF: usize,
 	const JOINTS: usize,
@@ -31,7 +31,7 @@ impl<
 	const DOF: usize,
 	const JOINTS: usize,
 	T: RealField + SubsetOf<f64> + Copy,
-> Default for CartProfile<PATH_LEN, DOF, JOINTS, T>
+> Default for CartTrap<PATH_LEN, DOF, JOINTS, T>
 {
 	fn default() -> Self {
 		Self {
@@ -48,7 +48,7 @@ impl<
 	const DOF: usize,
 	const JOINTS: usize,
 	T: RealField + SubsetOf<f64> + Copy,
-> CartProfile<PATH_LEN, DOF, JOINTS, T>
+> CartTrap<PATH_LEN, DOF, JOINTS, T>
 {
 	#[allow(clippy::too_many_arguments)]
 	pub fn compute<F: Fn(&[T]) -> [T; JOINTS] + Send + Sync>(

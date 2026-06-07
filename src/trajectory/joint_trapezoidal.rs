@@ -1,14 +1,12 @@
-use core::time::Duration;
-
 use nalgebra::{RealField, SVector};
 use simba::scalar::SubsetOf;
 
-use crate::{kinematics::Chain, trajectory::Trajectory};
+use crate::kinematics::Chain;
 
 /// Trapezoidal velocity profile for a multi joint move.
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug, Clone)]
-pub struct TrapProfile<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64>> {
+pub struct JointTrap<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64>> {
 	/// rad   — starting position
 	pub start:    SVector<T, DOF>,
 	/// rad   — target position
@@ -22,7 +20,7 @@ pub struct TrapProfile<const DOF: usize, const JOINTS: usize, T: RealField + Sub
 }
 
 impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> Default
-	for TrapProfile<DOF, JOINTS, T>
+	for JointTrap<DOF, JOINTS, T>
 {
 	fn default() -> Self {
 		Self {
@@ -36,7 +34,7 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
 }
 
 impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
-	TrapProfile<DOF, JOINTS, T>
+	JointTrap<DOF, JOINTS, T>
 {
 	/// Compute a profile given:
 	/// `speed_frac` - fraction of joints velocity [0.0..1.0]
@@ -48,7 +46,7 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
 		speed_frac: T,
 		a: T,
 	) -> Self {
-		let mut p = TrapProfile {
+		let mut p = JointTrap {
 			start,
 			end,
 			v_coast: SVector::<T, DOF>::zeros(),
@@ -121,6 +119,32 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
 
 		p
 	}
+
+	pub fn sample(&self, t: T) -> SVector<T, DOF> {
+		let half = T::from_subset(&0.5_f64);
+		let two = T::from_subset(&2.0_f64);
+
+		let t_ramp = self.t_ramp;
+		let t_cruise = self.t_cruise;
+		let t_total = t_ramp * two + t_cruise;
+
+		let t = nalgebra::clamp(t, T::zero(), t_total);
+
+		let p0 = &self.start;
+		let v_coast = &self.v_coast;
+
+		let s: T = if t <= t_ramp {
+			half * t * t / t_ramp
+		} else if t <= t_ramp + t_cruise {
+			let tau = t - t_ramp;
+			half * t_ramp + tau
+		} else {
+			let tau = t - t_ramp - t_cruise;
+			half * t_ramp + t_cruise + tau - half * tau * tau / t_ramp
+		};
+
+		p0 + v_coast * s
+	}
 }
 
 impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
@@ -129,19 +153,14 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
 	///Synchronized joint-space trapezoidal trajectory.
 	///speed is a fraction of max angular velocity for each joint in Chain `(0.0..1.0)`
 	///acc is `rad/s^2`
-	pub fn jplan_trap(
-		&self,
-		goal: SVector<T, DOF>,
-		speed: T,
-		acc: T,
-	) -> Trajectory<DOF, JOINTS, T> {
+	pub fn jplan_trap(&self, goal: SVector<T, DOF>, speed: T, acc: T) -> JointTrap<DOF, JOINTS, T> {
 		let start = self.joint_positions();
 
-		let profile = TrapProfile::compute(self, start, goal, speed, acc);
+		let profile = JointTrap::compute(self, start, goal, speed, acc);
 
-		let dur_secs = profile.t_ramp * nalgebra::convert(2.0) + profile.t_cruise;
-		let duration = Duration::from_secs_f64(nalgebra::convert(dur_secs));
+		// let dur_secs = profile.t_ramp * nalgebra::convert(2.0) + profile.t_cruise;
+		// let duration = Duration::from_secs_f64(nalgebra::convert(dur_secs));
 
-		Trajectory { profile, duration }
+		profile
 	}
 }
