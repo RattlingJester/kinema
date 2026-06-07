@@ -78,11 +78,15 @@ impl<
 			if let Err(e) = ik.solve(chain, target, &constraints) {
 				#[cfg(feature = "debug")]
 				eprintln!("IK failed at waypoint {i}/{PATH_LEN}: {e:?}");
+				chain.set_joint_positions(orig_pos)?;
 				return Err(e);
 			}
 
 			#[cfg(not(feature = "debug"))]
-			ik.solve(chain, target, &constraints)?;
+			if let Err(e) = ik.solve(chain, target, &constraints) {
+				chain.set_joint_positions(orig_pos)?;
+				return Err(e);
+			}
 
 			*item = chain.joint_positions();
 		}
