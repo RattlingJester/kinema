@@ -61,38 +61,61 @@ impl<
 		constraints: Constraints<JOINTS>,
 	) -> Result<Self, Error> {
 		let orig_pos = chain.joint_positions();
-
 		let two: T = nalgebra::convert(2.0);
 
-		let v_max = chain
-			.iter_movable()
-			.map(|(_, _, n)| n.joint.limits.velocity)
-			.fold(T::zero(), |a, b| a.max(b))
-			* speed_frac;
+		chain.update_transforms();
+		let jacobian = chain.jacobian();
+
+		let mut max_linear_contribution = T::zero();
+		let mut max_angular_contribution = T::zero();
+
+		for (i, (_, _, n)) in chain.iter_movable().enumerate() {
+			let q_dot_limit = n.joint.limits.velocity * speed_frac;
+
+			let linear_col = jacobian.fixed_view::<3, 1>(0, i);
+			let angular_col = jacobian.fixed_view::<3, 1>(3, i);
+
+			let lin_speed = linear_col.norm() * q_dot_limit;
+			let ang_speed = angular_col.norm() * q_dot_limit;
+
+			if lin_speed > max_linear_contribution {
+				max_linear_contribution = lin_speed;
+			}
+			if ang_speed > max_angular_contribution {
+				max_angular_contribution = ang_speed;
+			}
+		}
+
+		// Protect against zero/singular configurations
+		let v_max_linear = max_linear_contribution.max(nalgebra::convert(0.001));
+		let v_max_angular = max_angular_contribution.max(nalgebra::convert(0.001));
+
+		let acc_linear = acc * v_max_linear;
+		let acc_angular = acc * v_max_angular;
 
 		let path_length = start.rotation.rotation_to(&end.rotation).angle();
 
-		let d_ramp = (v_max * v_max) / (two * acc);
-
-		let (t_ramp, t_cruise, duration) = if path_length <= T::zero() {
-			// Pure translation or no motion — fall back to a fixed duration
-			// derived from translation distance treated as radians.
+		let (v_max, total_acc, total_dist) = if path_length <= T::zero() {
+			// Pure Translation Profile
 			let trans_len = (end.translation.vector - start.translation.vector).norm();
-			let d_ramp_t = (v_max * v_max) / (two * acc);
-			if two * d_ramp_t >= trans_len {
-				let t_ramp = (trans_len / acc).sqrt();
+			(v_max_linear, acc_linear, trans_len)
+		} else {
+			// Rotation-led Profile (Orientation or combined motion)
+			(v_max_angular, acc_angular, path_length)
+		};
+
+		let d_ramp = (v_max * v_max) / (two * total_acc);
+
+		let (t_ramp, t_cruise, duration) = if two * d_ramp >= total_dist {
+			if total_acc > T::zero() && total_dist > T::zero() {
+				let t_ramp = (total_dist / total_acc).sqrt();
 				(t_ramp, T::zero(), two * t_ramp)
 			} else {
-				let t_ramp = v_max / acc;
-				let t_cruise = (trans_len - two * d_ramp_t) / v_max;
-				(t_ramp, t_cruise, two * t_ramp + t_cruise)
+				(T::zero(), T::zero(), T::zero())
 			}
-		} else if two * d_ramp >= path_length {
-			let t_ramp = (path_length / acc).sqrt();
-			(t_ramp, T::zero(), two * t_ramp)
 		} else {
-			let t_ramp = v_max / acc;
-			let t_cruise = (path_length - two * d_ramp) / v_max;
+			let t_ramp = v_max / total_acc;
+			let t_cruise = (total_dist - two * d_ramp) / v_max;
 			(t_ramp, t_cruise, two * t_ramp + t_cruise)
 		};
 
@@ -106,6 +129,11 @@ impl<
 			};
 
 			let t = t.simd_clamp(T::zero(), duration);
+			if duration <= T::zero() {
+				*item = orig_pos;
+				continue;
+			}
+
 			let dist = if t <= t_ramp {
 				(v_max / (two * t_ramp)) * t * t
 			} else if t <= t_ramp + t_cruise {
@@ -114,12 +142,15 @@ impl<
 				let t_dec = t - t_ramp - t_cruise;
 				d_ramp + v_max * t_cruise + v_max * t_dec - (v_max / (two * t_ramp)) * t_dec * t_dec
 			};
-			let s = if path_length > T::zero() {
-				(dist / path_length).simd_clamp(T::zero(), T::one())
-			} else {
-				(dist / (end.translation.vector - start.translation.vector).norm())
-					.simd_clamp(T::zero(), T::one())
-			};
+
+			// let s = if path_length > T::zero() {
+			// 	(dist / path_length).simd_clamp(T::zero(), T::one())
+			// } else {
+			// 	(dist / (end.translation.vector - start.translation.vector).norm())
+			// 		.simd_clamp(T::zero(), T::one())
+			// };
+
+			let s = (dist / total_dist).simd_clamp(T::zero(), T::one());
 
 			let target = Self::interpolate(&start, &end, s);
 			#[cfg(feature = "debug")]
