@@ -160,7 +160,7 @@ impl<
 		&self,
 		chain: &mut Chain<DOF, JOINTS, T>,
 		target: Isometry3<T>,
-		constraints: Constraints<JOINTS>,
+		constraints: &Constraints<JOINTS>,
 	) -> Result<(), Error> {
 		let op_space = constraints.operational_space();
 		let orig_positions = chain.joint_positions();
