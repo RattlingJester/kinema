@@ -257,6 +257,25 @@ fn calc_pose_diff_with_constraints<const DOF: usize, T: RealField>(
 	diff
 }
 
+/// Utility function to create nullspace function using reference joint positions.
+///
+/// H(q) = 1/2(q-q^)T W (q-q^)
+/// dH(q) / dq = W (q-q^)
+///
+/// Taken from k crate
+pub fn create_reference_positions_nullspace_function<const DOF: usize, T: RealField + Copy>(
+	reference_positions: SVector<T, DOF>,
+	weight_vector: SVector<T, DOF>,
+) -> impl Fn(&[T]) -> [T; DOF] {
+	move |positions| {
+		let mut derivative_vec = [T::zero(); DOF];
+		for i in 0..DOF {
+			derivative_vec[i] = weight_vector[i] * (positions[i] - reference_positions[i]);
+		}
+		derivative_vec
+	}
+}
+
 #[derive(Debug)]
 pub struct Constraints<const J: usize> {
 	pub position_x:     bool,
