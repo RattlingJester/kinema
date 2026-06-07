@@ -67,6 +67,9 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 		let jacobi_full = chain.jacobian();
 		let mut jacobi = SMatrix::<T, 6, DOF>::zeros();
 
+		#[cfg(feature = "std")]
+		eprintln!("Jacobian:\n{}", jacobi_full);
+
 		for src_r in 0..6 {
 			if !op_space[src_r] {
 				continue;
