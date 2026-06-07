@@ -66,41 +66,56 @@ impl<
 		chain.update_transforms();
 		let jacobian = chain.jacobian();
 
-		let mut max_linear_contribution = T::zero();
-		let mut max_angular_contribution = T::zero();
-
-		for (i, (_, _, n)) in chain.iter_movable().enumerate() {
-			let q_dot_limit = n.joint.limits.velocity * speed_frac;
-
-			let linear_col = jacobian.fixed_view::<3, 1>(0, i);
-			let angular_col = jacobian.fixed_view::<3, 1>(3, i);
-
-			let lin_speed = linear_col.norm() * q_dot_limit;
-			let ang_speed = angular_col.norm() * q_dot_limit;
-
-			if lin_speed > max_linear_contribution {
-				max_linear_contribution = lin_speed;
-			}
-			if ang_speed > max_angular_contribution {
-				max_angular_contribution = ang_speed;
-			}
-		}
-
-		// Protect against zero/singular configurations
-		let v_max_linear = max_linear_contribution.max(nalgebra::convert(0.001));
-		let v_max_angular = max_angular_contribution.max(nalgebra::convert(0.001));
-
-		let acc_linear = acc * v_max_linear;
-		let acc_angular = acc * v_max_angular;
+		let translation_delta = end.translation.vector - start.translation.vector;
+		let trans_len = translation_delta.norm();
 
 		let path_length = start.rotation.rotation_to(&end.rotation).angle();
 
+		let mut v_max_linear = T::zero();
+		let mut v_max_angular = T::zero();
+
+		if path_length <= T::zero() && trans_len > T::zero() {
+			let u_dir = translation_delta / trans_len;
+
+			for (i, (_, _, n)) in chain.iter_movable().enumerate() {
+				let q_dot_limit = n.joint.limits.velocity * speed_frac;
+				let linear_col = jacobian.fixed_view::<3, 1>(0, i);
+
+				let projection = linear_col.dot(&u_dir).abs();
+
+				if projection > T::zero() {
+					let joint_v_max = q_dot_limit / projection;
+					if v_max_linear == T::zero() || joint_v_max < v_max_linear {
+						v_max_linear = joint_v_max;
+					}
+				}
+			}
+		} else {
+			for (i, (_, _, n)) in chain.iter_movable().enumerate() {
+				let q_dot_limit = n.joint.limits.velocity * speed_frac;
+				let linear_col = jacobian.fixed_view::<3, 1>(0, i);
+				let angular_col = jacobian.fixed_view::<3, 1>(3, i);
+
+				let lin_speed = linear_col.norm() * q_dot_limit;
+				let ang_speed = angular_col.norm() * q_dot_limit;
+
+				if lin_speed > v_max_linear {
+					v_max_linear = lin_speed;
+				}
+				if ang_speed > v_max_angular {
+					v_max_angular = ang_speed;
+				}
+			}
+		}
+
+		let acc_linear = acc * v_max_linear;
+		let acc_angular = acc * v_max_angular;
+		let path_length = start.rotation.rotation_to(&end.rotation).angle();
+
 		let (v_max, total_acc, total_dist) = if path_length <= T::zero() {
-			// Pure Translation Profile
 			let trans_len = (end.translation.vector - start.translation.vector).norm();
 			(v_max_linear, acc_linear, trans_len)
 		} else {
-			// Rotation-led Profile (Orientation or combined motion)
 			(v_max_angular, acc_angular, path_length)
 		};
 
