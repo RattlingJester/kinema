@@ -74,7 +74,7 @@ impl<
 		let mut v_max_linear = T::zero();
 		let mut v_max_angular = T::zero();
 
-		if path_length <= T::zero() && trans_len > T::zero() {
+		if path_length <= T::default_epsilon() && trans_len > T::zero() {
 			let u_dir = translation_delta / trans_len;
 
 			let mut total_projected_capability = T::zero();
@@ -110,7 +110,7 @@ impl<
 		let mut acc_linear = T::zero();
 		let acc_angular = acc;
 
-		if path_length <= T::zero() && trans_len > T::zero() {
+		if path_length <= T::default_epsilon() && trans_len > T::zero() {
 			let u_dir = translation_delta / trans_len;
 			let mut total_projected_accel = T::zero();
 
@@ -124,7 +124,7 @@ impl<
 			acc_linear = total_projected_accel / movable_count;
 		}
 
-		let (v_max, total_acc, total_dist) = if path_length <= T::zero() {
+		let (v_max, total_acc, total_dist) = if path_length <= T::default_epsilon() {
 			let trans_len = (end.translation.vector - start.translation.vector).norm();
 			(v_max_linear, acc_linear, trans_len)
 		} else {
