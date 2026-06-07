@@ -61,134 +61,49 @@ impl<
 		constraints: Constraints<JOINTS>,
 	) -> Result<Self, Error> {
 		let orig_pos = chain.joint_positions();
-		let two: T = nalgebra::convert(2.0);
 
-		chain.update_transforms();
-		let jacobian = chain.jacobian();
-
-		let translation_delta = end.translation.vector - start.translation.vector;
-		let trans_len = translation_delta.norm();
-
-		let path_length = start.rotation.rotation_to(&end.rotation).angle();
-
-		let mut v_max_linear = T::zero();
-		let mut v_max_angular = T::zero();
-
-		if path_length <= T::default_epsilon() && trans_len > T::zero() {
-			let u_dir = translation_delta / trans_len;
-
-			let mut total_projected_capability = T::zero();
-
-			for (i, (_, _, n)) in chain.iter_movable().enumerate() {
-				let q_dot_limit = n.joint.limits.velocity * speed_frac;
-				let linear_col = jacobian.fixed_view::<3, 1>(0, i);
-
-				let contribution = linear_col.dot(&u_dir).abs();
-				total_projected_capability += contribution * q_dot_limit;
-			}
-
-			let movable_count = nalgebra::convert::<f64, T>(chain.iter_movable().count() as f64);
-			v_max_linear = total_projected_capability / movable_count;
-		} else {
-			for (i, (_, _, n)) in chain.iter_movable().enumerate() {
-				let q_dot_limit = n.joint.limits.velocity * speed_frac;
-				let linear_col = jacobian.fixed_view::<3, 1>(0, i);
-				let angular_col = jacobian.fixed_view::<3, 1>(3, i);
-
-				let lin_speed = linear_col.norm() * q_dot_limit;
-				let ang_speed = angular_col.norm() * q_dot_limit;
-
-				if lin_speed > v_max_linear {
-					v_max_linear = lin_speed;
-				}
-				if ang_speed > v_max_angular {
-					v_max_angular = ang_speed;
-				}
-			}
-		}
-
-		let mut acc_linear = T::zero();
-		let acc_angular = acc;
-
-		if path_length <= T::default_epsilon() && trans_len > T::zero() {
-			let u_dir = translation_delta / trans_len;
-			let mut total_projected_accel = T::zero();
-
-			for (i, _) in chain.iter_movable().enumerate() {
-				let linear_col = jacobian.fixed_view::<3, 1>(0, i);
-				let contribution = linear_col.dot(&u_dir).abs();
-				total_projected_accel += contribution * acc; // input acc is rad/s^2
-			}
-
-			let movable_count = nalgebra::convert::<f64, T>(chain.iter_movable().count() as f64);
-			acc_linear = total_projected_accel / movable_count;
-		}
-
-		let (v_max, total_acc, total_dist) = if path_length <= T::default_epsilon() {
-			let trans_len = (end.translation.vector - start.translation.vector).norm();
-			(v_max_linear, acc_linear, trans_len)
-		} else {
-			(v_max_angular, acc_angular, path_length)
-		};
-
-		let d_ramp = (v_max * v_max) / (two * total_acc);
-
-		let (t_ramp, t_cruise, duration) = if two * d_ramp >= total_dist {
-			if total_acc > T::zero() && total_dist > T::zero() {
-				let t_ramp = (total_dist / total_acc).sqrt();
-				(t_ramp, T::zero(), two * t_ramp)
-			} else {
-				(T::zero(), T::zero(), T::zero())
-			}
-		} else {
-			let t_ramp = v_max / total_acc;
-			let t_cruise = (total_dist - two * d_ramp) / v_max;
-			(t_ramp, t_cruise, two * t_ramp + t_cruise)
-		};
-
-		let mut path = [SVector::<T, DOF>::zeros(); PATH_LEN];
+		let mut path = [SVector::zeros(); PATH_LEN];
 
 		for (i, item) in path.iter_mut().enumerate() {
-			let t = if PATH_LEN > 1 {
-				duration * nalgebra::convert::<f64, T>(i as f64 / (PATH_LEN - 1) as f64)
+			let s = if PATH_LEN > 1 {
+				nalgebra::convert::<f64, T>(i as f64)
+					/ nalgebra::convert::<f64, T>((PATH_LEN - 1) as f64)
 			} else {
-				duration
+				T::one()
 			};
-
-			let t = t.simd_clamp(T::zero(), duration);
-			if duration <= T::zero() {
-				*item = orig_pos;
-				continue;
-			}
-
-			let dist = if t <= t_ramp {
-				(v_max / (two * t_ramp)) * t * t
-			} else if t <= t_ramp + t_cruise {
-				d_ramp + v_max * (t - t_ramp)
-			} else {
-				let t_dec = t - t_ramp - t_cruise;
-				d_ramp + v_max * t_cruise + v_max * t_dec - (v_max / (two * t_ramp)) * t_dec * t_dec
-			};
-
-			let s = (dist / total_dist).simd_clamp(T::zero(), T::one());
 
 			let target = Self::interpolate(&start, &end, s);
+
 			#[cfg(feature = "debug")]
-			eprintln!(
-				"wp {i}: s={s:.6}, joints before IK: {:?}",
-				chain.joint_positions()
-			);
-
 			if let Err(e) = ik.solve(chain, target, &constraints) {
-				chain.set_joint_positions(orig_pos)?;
-
 				#[cfg(feature = "debug")]
 				eprintln!("IK failed at waypoint {i}/{PATH_LEN}: {e:?}");
-
 				return Err(e);
 			}
 
+			#[cfg(not(feature = "debug"))]
+			ik.solve(chain, target, &constraints)?;
+
 			*item = chain.joint_positions();
+		}
+
+		let mut duration = T::zero();
+
+		for segment in path.windows(2) {
+			let q0 = &segment[0];
+			let q1 = &segment[1];
+
+			let mut seg_time = T::zero();
+
+			for (joint_idx, (_, _, node)) in chain.iter_movable().enumerate() {
+				let dq = (q1[joint_idx] - q0[joint_idx]).abs();
+
+				let t = Self::move_time(dq, node.joint.limits.velocity * speed_frac, acc);
+
+				seg_time = seg_time.max(t);
+			}
+
+			duration += seg_time;
 		}
 
 		Ok(Self {
@@ -219,6 +134,21 @@ impl<
 		let frac: T = idx_f - nalgebra::convert::<f64, T>(idx_lo as f64);
 
 		self.path[idx_lo].lerp(&self.path[idx_hi], frac)
+	}
+
+	fn move_time(distance: T, vmax: T, amax: T) -> T {
+		let two: T = nalgebra::convert(2.0);
+
+		let d_ramp = vmax * vmax / (two * amax);
+
+		if distance <= two * d_ramp {
+			two * (distance / amax).sqrt()
+		} else {
+			let t_ramp = vmax / amax;
+			let d_cruise = distance - two * d_ramp;
+
+			two * t_ramp + d_cruise / vmax
+		}
 	}
 
 	fn interpolate(start: &Isometry3<T>, end: &Isometry3<T>, s: T) -> Isometry3<T> {
