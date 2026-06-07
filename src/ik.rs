@@ -159,14 +159,14 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 		let op_space = constraints.operational_space();
 		let orig_positions = chain.joint_positions();
 
-		let required_dof = op_space.iter().filter(|x| **x).count();
-		let available_dof = DOF - constraints.ignored_joints.len();
-		if available_dof < required_dof {
-			return Err(Error::SizeMismatch {
-				provided: available_dof,
-				expected: required_dof,
-			});
-		}
+		// let required_dof = op_space.iter().filter(|x| **x).count();
+		// let available_dof = DOF - constraints.ignored_joints.len();
+		// if available_dof < required_dof {
+		// 	return Err(Error::SizeMismatch {
+		// 		provided: available_dof,
+		// 		expected: required_dof,
+		// 	});
+		// }
 
 		let mut last_target_distance = None;
 

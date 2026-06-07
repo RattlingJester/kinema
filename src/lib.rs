@@ -15,25 +15,27 @@ pub(crate) const MAX_NAME_LEN: usize = 32;
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-	#[error("")]
-	SizeMismatch { provided: usize, expected: usize },
-	#[error("")]
+	// #[error("Mismatch")]
+	// SizeMismatch { provided: usize, expected: usize },
+	#[error("Node count mismatch, got: {got}")]
 	NodeCountMismatch { got: usize },
-	#[error("")]
+	#[error("Movable count mismatch, got: {got}")]
 	MovableCountMismatch { got: usize },
-	#[error("")]
+	#[error("Unknown parent link")]
 	UnknownParentLink,
-	#[error("")]
+	#[error("Unsupported joint type")]
 	UnsupportedJointType,
-	#[error("")]
+	#[error("Jacobian error")]
 	MathError,
-	#[error("")]
+	#[error(
+		"Inverse kinematics not converged.\nTries: {tries},\npos_diff: {pos_diff},\nrot_diff: {rot_diff}"
+	)]
 	IkNotConverged {
 		tries:    usize,
 		pos_diff: Vector3<f64>,
 		rot_diff: Vector3<f64>,
 	},
 	#[cfg(feature = "urdf")]
-	#[error("")]
+	#[error("URDF parse error: {0}")]
 	UrdfError(#[from] urdf_rs::UrdfError),
 }
