@@ -125,6 +125,10 @@ impl<
 
 			if let Err(e) = ik.solve(chain, target, &constraints) {
 				chain.set_joint_positions(orig_pos)?;
+
+				#[cfg(feature = "std")]
+				eprintln!("IK failed at waypoint {i}/{PATH_LEN}: {e:?}");
+
 				return Err(e);
 			}
 
