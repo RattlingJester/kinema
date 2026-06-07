@@ -77,19 +77,18 @@ impl<
 		if path_length <= T::zero() && trans_len > T::zero() {
 			let u_dir = translation_delta / trans_len;
 
+			let mut total_projected_capability = T::zero();
+
 			for (i, (_, _, n)) in chain.iter_movable().enumerate() {
 				let q_dot_limit = n.joint.limits.velocity * speed_frac;
 				let linear_col = jacobian.fixed_view::<3, 1>(0, i);
 
-				let projection = linear_col.dot(&u_dir).abs();
-
-				if projection > T::zero() {
-					let joint_v_max = q_dot_limit / projection;
-					if v_max_linear == T::zero() || joint_v_max < v_max_linear {
-						v_max_linear = joint_v_max;
-					}
-				}
+				let contribution = linear_col.dot(&u_dir).abs();
+				total_projected_capability += contribution * q_dot_limit;
 			}
+
+			let movable_count = nalgebra::convert::<f64, T>(chain.iter_movable().count() as f64);
+			v_max_linear = total_projected_capability / movable_count;
 		} else {
 			for (i, (_, _, n)) in chain.iter_movable().enumerate() {
 				let q_dot_limit = n.joint.limits.velocity * speed_frac;
@@ -113,22 +112,16 @@ impl<
 
 		if path_length <= T::zero() && trans_len > T::zero() {
 			let u_dir = translation_delta / trans_len;
+			let mut total_projected_accel = T::zero();
 
 			for (i, _) in chain.iter_movable().enumerate() {
 				let linear_col = jacobian.fixed_view::<3, 1>(0, i);
-				let projection = linear_col.dot(&u_dir).abs();
-
-				if projection > T::zero() {
-					let joint_a_max = acc / projection;
-					if acc_linear == T::zero() || joint_a_max < acc_linear {
-						acc_linear = joint_a_max;
-					}
-				}
+				let contribution = linear_col.dot(&u_dir).abs();
+				total_projected_accel += contribution * acc; // input acc is rad/s^2
 			}
-		}
 
-		if acc_linear <= T::zero() {
-			acc_linear = acc * nalgebra::convert(0.1);
+			let movable_count = nalgebra::convert::<f64, T>(chain.iter_movable().count() as f64);
+			acc_linear = total_projected_accel / movable_count;
 		}
 
 		let (v_max, total_acc, total_dist) = if path_length <= T::zero() {
