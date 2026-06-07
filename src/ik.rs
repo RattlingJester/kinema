@@ -1,6 +1,4 @@
-#![allow(unused)]
-
-use nalgebra::{Isometry3, OMatrix, OVector, RealField, SMatrix, SVector, Vector3, Vector6};
+use nalgebra::{Isometry3, RealField, SMatrix, SVector, Vector3, Vector6};
 use simba::scalar::SubsetOf;
 
 use crate::{Error, kinematics::Chain, node::NodeIDx};
@@ -66,9 +64,6 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 
 		let jacobi_full = chain.jacobian();
 		let mut jacobi = SMatrix::<T, 6, DOF>::zeros();
-
-		#[cfg(feature = "std")]
-		eprintln!("Jacobian:\n{}", jacobi_full);
 
 		for src_r in 0..6 {
 			if !op_space[src_r] {
@@ -146,6 +141,7 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 		}
 
 		chain.set_joint_positions_clamped(positions_vec)?;
+		chain.update_transforms();
 
 		Ok(calc_pose_diff_with_constraints(
 			&target,
@@ -186,13 +182,15 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 				&& rot_diff.norm() < self.allowable_error_angle
 			{
 				let non_checked_positions = chain.joint_positions();
-				chain.set_joint_positions_clamped(non_checked_positions);
+				chain.set_joint_positions_clamped(non_checked_positions)?;
+				chain.update_transforms();
 				return Ok(());
 			}
 			last_target_distance = Some((len_diff, rot_diff));
 		}
 
 		chain.set_joint_positions(orig_positions)?;
+		chain.update_transforms();
 
 		Err(Error::IkNotConverged {
 			tries:    self.max_try,
@@ -243,7 +241,6 @@ fn calc_pose_diff_with_constraints<const DOF: usize, T: RealField>(
 	operational_space: [bool; 6],
 ) -> SVector<T, DOF> {
 	let full_diff = calc_pose_diff(a, b);
-	let use_dof = operational_space.iter().filter(|x| **x).count();
 	let mut diff = SVector::from_element(T::zero());
 	let mut index = 0;
 	for (i, use_i) in operational_space.iter().enumerate() {
