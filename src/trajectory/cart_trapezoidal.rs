@@ -51,13 +51,13 @@ impl<
 > CartTrap<PATH_LEN, DOF, JOINTS, T>
 {
 	#[allow(clippy::too_many_arguments)]
-	pub fn compute<F: Fn(&[T]) -> [T; JOINTS] + Send + Sync>(
+	pub fn compute(
 		chain: &mut Chain<DOF, JOINTS, T>,
 		start: Isometry3<T>,
 		end: Isometry3<T>,
 		speed_frac: T,
 		acc: T,
-		ik: &JacobianIK<JOINTS, T, F>,
+		ik: &JacobianIK<JOINTS, T>,
 		constraints: Constraints<JOINTS>,
 	) -> Result<Self, Error> {
 		let orig_pos = chain.joint_positions();

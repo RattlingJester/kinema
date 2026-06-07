@@ -5,18 +5,18 @@ use simba::scalar::SubsetOf;
 
 use crate::{Error, kinematics::Chain, node::NodeIDx};
 
-#[derive(Debug)]
-pub struct JacobianIK<const JOINTS: usize, T: RealField, F: Fn(&[T]) -> [T; JOINTS] + Send + Sync> {
+// #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct JacobianIK<const JOINTS: usize, T: RealField> {
 	pub allowable_error_dist:  T,
 	pub allowable_error_angle: T,
 	pub jacobian_mult:         T,
 	pub max_try:               usize,
-	pub nullpace_fn:           Option<F>,
+	#[allow(clippy::type_complexity)]
+	pub nullpace_fn:           Option<&'static (dyn Fn(&[T]) -> [T; JOINTS] + Send + Sync)>,
 }
 
-impl<const J: usize, T: RealField + SubsetOf<f64> + Copy, F: Fn(&[T]) -> [T; J] + Send + Sync>
-	Default for JacobianIK<J, T, F>
-{
+impl<const J: usize, T: RealField + SubsetOf<f64> + Copy> Default for JacobianIK<J, T> {
 	fn default() -> Self {
 		Self::new(
 			nalgebra::convert(0.001),
@@ -27,12 +27,7 @@ impl<const J: usize, T: RealField + SubsetOf<f64> + Copy, F: Fn(&[T]) -> [T; J] 
 	}
 }
 
-impl<
-	const JOINTS: usize,
-	T: RealField + SubsetOf<f64> + Copy,
-	F: Fn(&[T]) -> [T; JOINTS] + Send + Sync,
-> JacobianIK<JOINTS, T, F>
-{
+impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS, T> {
 	pub fn new(
 		allowable_error_dist: T,
 		allowable_error_angle: T,
