@@ -108,9 +108,28 @@ impl<
 			}
 		}
 
-		let acc_linear = acc * v_max_linear;
-		let acc_angular = acc * v_max_angular;
-		let path_length = start.rotation.rotation_to(&end.rotation).angle();
+		let mut acc_linear = T::zero();
+		let acc_angular = acc;
+
+		if path_length <= T::zero() && trans_len > T::zero() {
+			let u_dir = translation_delta / trans_len;
+
+			for (i, _) in chain.iter_movable().enumerate() {
+				let linear_col = jacobian.fixed_view::<3, 1>(0, i);
+				let projection = linear_col.dot(&u_dir).abs();
+
+				if projection > T::zero() {
+					let joint_a_max = acc / projection;
+					if acc_linear == T::zero() || joint_a_max < acc_linear {
+						acc_linear = joint_a_max;
+					}
+				}
+			}
+		}
+
+		if acc_linear <= T::zero() {
+			acc_linear = acc * nalgebra::convert(0.1);
+		}
 
 		let (v_max, total_acc, total_dist) = if path_length <= T::zero() {
 			let trans_len = (end.translation.vector - start.translation.vector).norm();
@@ -157,13 +176,6 @@ impl<
 				let t_dec = t - t_ramp - t_cruise;
 				d_ramp + v_max * t_cruise + v_max * t_dec - (v_max / (two * t_ramp)) * t_dec * t_dec
 			};
-
-			// let s = if path_length > T::zero() {
-			// 	(dist / path_length).simd_clamp(T::zero(), T::one())
-			// } else {
-			// 	(dist / (end.translation.vector - start.translation.vector).norm())
-			// 		.simd_clamp(T::zero(), T::one())
-			// };
 
 			let s = (dist / total_dist).simd_clamp(T::zero(), T::one());
 
