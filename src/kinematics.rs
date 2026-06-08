@@ -59,14 +59,12 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64>> Chain<
 		Ok(())
 	}
 
-	pub fn set_joint_positions_clamped(&mut self, pos: SVector<T, DOF>) -> Result<(), Error> {
+	pub fn set_joint_positions_clamped(&mut self, pos: SVector<T, DOF>) {
 		for (i, &idx) in self.movable_nodes.iter().enumerate() {
 			let limits = &self.nodes[idx].joint.limits.clone();
 			self.nodes[idx].joint.pos =
 				nalgebra::clamp(pos[i].clone(), limits.min.clone(), limits.max.clone());
 		}
-
-		Ok(())
 	}
 
 	/// Recompute world transforms bottom-up.
