@@ -105,6 +105,13 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 			alpha[i] = roll;
 		}
 
+		#[cfg(feature = "debug")]
+		{
+			dbg!(a);
+			dbg!(d);
+			dbg!(alpha);
+		}
+
 		Self { d, a, alpha }
 	}
 
