@@ -5,7 +5,7 @@ use simba::scalar::SubsetOf;
 
 use crate::{
 	Error,
-	joint::JointType,
+	joint::{JointLimit, JointType},
 	node::{Node, NodeIDx},
 };
 #[cfg(feature = "urdf")]
@@ -50,6 +50,21 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64>> Chain<
 
 	pub fn joint_positions(&self) -> SVector<T, DOF> {
 		SVector::from_fn(|i, _| self.nodes[self.movable_nodes[i]].joint.pos.clone())
+	}
+
+	pub fn joint_limits(&self) -> [JointLimit<T>; DOF] {
+		let mut limits = core::array::from_fn(|_| JointLimit {
+			min:      T::zero(),
+			max:      T::zero(),
+			velocity: T::zero(),
+			effort:   T::zero(),
+		});
+
+		for (idx, _, node) in self.iter_movable() {
+			limits[idx] = node.joint.limits.clone();
+		}
+
+		limits
 	}
 
 	pub fn set_joint_positions(&mut self, pos: SVector<T, DOF>) -> Result<(), Error> {
