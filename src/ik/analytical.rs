@@ -119,12 +119,12 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 			eprintln!(
 				"solution {i}: feasible={}, joints={:.4?}",
 				s.feasible,
-				s.joints.as_slice()
+				s.pose.as_slice()
 			);
 			for (j, _, node) in chain.iter_movable() {
 				eprintln!(
 					"  joint {j}: value={:.4}, limits=[{:.4}, {:.4}]",
-					nalgebra::try_convert::<T, f64>(s.joints[j]).unwrap(),
+					nalgebra::try_convert::<T, f64>(s.pose[j]).unwrap(),
 					nalgebra::try_convert::<T, f64>(node.joint.limits.min).unwrap(),
 					nalgebra::try_convert::<T, f64>(node.joint.limits.max).unwrap(),
 				);
