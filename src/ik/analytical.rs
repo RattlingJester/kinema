@@ -104,9 +104,9 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 
 		#[cfg(feature = "debug")]
 		{
-			eprintln!("d:     {:?}", ik.d.map(|v| v as f64));
-			eprintln!("a:     {:?}", ik.a.map(|v| v as f64));
-			eprintln!("alpha: {:?}", ik.alpha.map(|v| v as f64));
+			eprintln!("d:     {:?}", d.map(|v| v as f64));
+			eprintln!("a:     {:?}", a.map(|v| v as f64));
+			eprintln!("alpha: {:?}", alpha.map(|v| v as f64));
 			eprintln!("wrist center from start: ...");
 		}
 
