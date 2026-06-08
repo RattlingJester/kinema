@@ -102,6 +102,14 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 			alpha[i] = euler.0; // roll = rotation about X
 		}
 
+		#[cfg(feature = "debug")]
+		{
+			eprintln!("d:     {:?}", ik.d.map(|v| v as f64));
+			eprintln!("a:     {:?}", ik.a.map(|v| v as f64));
+			eprintln!("alpha: {:?}", ik.alpha.map(|v| v as f64));
+			eprintln!("wrist center from start: ...");
+		}
+
 		Self { d, a, alpha }
 	}
 
@@ -164,6 +172,9 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 		let wy = wrist_center[1];
 		let wz = wrist_center[2];
 
+		#[cfg(feature = "debug")]
+		eprintln!("wrist_center: [{wx:.4}, {wy:.4}, {wz:.4}]");
+
 		let theta1_a = wy.atan2(wx);
 		let theta1_b = theta1_a + T::pi();
 
@@ -177,6 +188,12 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 			let d_sw_sq = r_xy * r_xy + z2 * z2;
 
 			let cos_theta3 = (d_sw_sq - a2 * a2 - a3 * a3) / (two * a2 * a3);
+
+			#[cfg(feature = "debug")]
+			eprintln!(
+				"theta1={theta1:.4}, r_xy={r_xy:.4}, z2={z2:.4}, d_sw={:.4}, cos_theta3={cos_theta3:.4}",
+				d_sw_sq.sqrt()
+			);
 
 			if cos_theta3 < nalgebra::convert(-1.0) || cos_theta3 > T::one() {
 				continue;
