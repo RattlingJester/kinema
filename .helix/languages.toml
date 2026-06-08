@@ -2,6 +2,6 @@
 name = "rust"
 
 [language-server.rust-analyzer.config]
-cargo = { features = ["debug"] }
+cargo = { features = ["debug", "urdf"] }
 rustfmt.rangeFormatting.enable = true
 rustfmt.extraArgs = ["+nightly"]
