@@ -1,4 +1,4 @@
-use nalgebra::{Isometry3, Matrix3, RealField, SVector};
+use nalgebra::{Isometry3, Matrix3, RealField, SVector, Vector3};
 use simba::scalar::SubsetOf;
 
 use crate::{Error, ik::IkSolver, kinematics::Chain};
@@ -106,9 +106,9 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 			for (j, _, node) in chain.iter_movable() {
 				eprintln!(
 					"  joint {j}: value={:.4}, limits=[{:.4}, {:.4}]",
-					nalgebra::try_convert::<T, f64>(s.pose[j]).unwrap(),
-					nalgebra::try_convert::<T, f64>(node.joint.limits.min).unwrap(),
-					nalgebra::try_convert::<T, f64>(node.joint.limits.max).unwrap(),
+					nalgebra::try_convert::<T, f32>(s.pose[j]).unwrap(),
+					nalgebra::try_convert::<T, f32>(node.joint.limits.min).unwrap(),
+					nalgebra::try_convert::<T, f32>(node.joint.limits.max).unwrap(),
 				);
 			}
 		}
@@ -132,151 +132,172 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 		chain: &Chain<DOF, JOINTS, T>,
 	) -> ([IkSolution<T>; 8], usize) {
 		let mut solutions: [IkSolution<T>; 8] = core::array::from_fn(|_| IkSolution::default());
-		let mut count = 0;
 
-		let two: T = nalgebra::convert(2.0);
+		let p_tcp = target.translation.vector;
 
-		let r = target.rotation.to_rotation_matrix();
-		let p = target.translation.vector;
+		let r_target: Matrix3<T> = target.rotation.to_rotation_matrix().into_inner();
 
-		let z6 = r.matrix().column(2).into_owned();
-		let wrist_center = p - z6 * self.d6;
-		let wx = wrist_center[0];
-		let wy = wrist_center[1];
-		let wz = wrist_center[2];
+		let approach = Vector3::new(r_target[(0, 2)], r_target[(1, 2)], r_target[(2, 2)]);
 
-		let theta1_a = wy.atan2(wx);
-		let theta1_b = theta1_a + T::pi();
+		let p_wc = p_tcp - approach * self.d6;
 
-		for &theta1 in &[theta1_a, theta1_b] {
-			let r_xy = wx * theta1.cos() + wy * theta1.sin() - self.a1;
-			let z2 = wz - self.d1;
+		let two = T::one() + T::one();
 
-			let d_sw_sq = r_xy * r_xy + z2 * z2;
+		let rxy = (p_wc.x * p_wc.x + p_wc.y * p_wc.y).sqrt();
 
-			let cos_theta3 =
-				(d_sw_sq - self.a2 * self.a2 - self.a3 * self.a3) / (two * self.a2 * self.a3);
+		let r_eff = rxy - self.a1;
+		let h_eff = p_wc.z - self.d1;
 
-			if cos_theta3 < nalgebra::convert(-1.0) || cos_theta3 > T::one() {
-				continue;
-			}
+		let d_sw2 = r_eff * r_eff + h_eff * h_eff;
+		// let d_sw = d_sw2.sqrt();
 
-			let sin_theta3_pos = (T::one() - cos_theta3 * cos_theta3).sqrt();
+		let cos_theta3 =
+			(d_sw2 - self.a2 * self.a2 - self.a3 * self.a3) / (two * self.a2 * self.a3);
 
-			for &sin_theta3 in &[sin_theta3_pos, -sin_theta3_pos] {
-				let theta3 = sin_theta3.atan2(cos_theta3);
+		if cos_theta3.abs() > T::one() {
+			return (solutions, 0);
+		}
 
-				let k1 = self.a2 + self.a3 * cos_theta3;
-				let k2 = self.a3 * sin_theta3;
-				let theta2 = z2.atan2(r_xy) - k2.atan2(k1);
+		let sin_theta3_pos = (T::one() - cos_theta3 * cos_theta3).sqrt();
+		let sin_theta3_neg = -sin_theta3_pos;
 
-				let r03 = self.calculate_r03(theta1, theta2, theta3);
-				let r36 = r03.transpose() * r.matrix();
+		let theta1_front = T::atan2(p_wc.y, p_wc.x);
+		let theta1_back = atan2_flip(p_wc.y, p_wc.x);
 
-				let wrist_options = extract_wrist_yzy(&r36);
+		let mut sol_idx = 0usize;
 
-				for (t4, t5, t6) in wrist_options {
-					if count < 8 {
-						let mut pose = SVector::<T, 6>::zeros();
-						pose[0] = theta1;
-						pose[1] = theta2;
-						pose[2] = theta3;
-						pose[3] = t4;
-						pose[4] = t5;
-						pose[5] = t6;
+		for &theta1 in &[theta1_front, theta1_back] {
+			let r_eff_local = if theta1 == theta1_front {
+				rxy - self.a1
+			} else {
+				-(rxy + self.a1)
+			};
 
-						solutions[count] = IkSolution {
-							feasible: self.check_limits(chain, &pose),
-							pose,
-						};
-						count += 1;
-					}
+			for &sin3 in &[sin_theta3_pos, sin_theta3_neg] {
+				let theta3 = T::atan2(sin3, cos_theta3);
+
+				let alpha = T::atan2(h_eff, r_eff_local);
+				let beta = T::atan2(self.a3 * sin3, self.a2 + self.a3 * cos_theta3);
+				let theta2 = alpha - beta;
+
+				let r03 = rotation_0_3(theta1, theta2, theta3);
+				let r36 = r03.transpose() * r_target;
+
+				for &wrist_flip in &[false, true] {
+					let theta5_pos_or_neg = T::atan2(
+						(r36[(0, 2)] * r36[(0, 2)] + r36[(1, 2)] * r36[(1, 2)]).sqrt(),
+						r36[(2, 2)],
+					);
+					let theta5 = if wrist_flip {
+						-theta5_pos_or_neg
+					} else {
+						theta5_pos_or_neg
+					};
+
+					let (theta4, theta6) = if theta5.abs() < T::from_f64(1e-6).unwrap() {
+						let t4 = T::atan2(r36[(1, 0)], r36[(0, 0)]);
+						(t4, T::zero())
+					} else if (theta5 - T::pi()).abs() < T::from_f64(1e-6).unwrap() {
+						let t4 = T::atan2(-r36[(1, 0)], -r36[(0, 0)]);
+						(t4, T::zero())
+					} else {
+						let sign = if wrist_flip { -T::one() } else { T::one() };
+						let t4 = T::atan2(sign * r36[(1, 2)], sign * r36[(0, 2)]);
+						let t6 = T::atan2(sign * r36[(2, 1)], -sign * r36[(2, 0)]);
+						(t4, t6)
+					};
+
+					let pose = SVector::<T, 6>::from([
+						wrap_pi(theta1),
+						wrap_pi(theta2),
+						wrap_pi(theta3),
+						wrap_pi(theta4),
+						wrap_pi(theta5),
+						wrap_pi(theta6),
+					]);
+
+					let feasible = check_limits(pose, chain);
+
+					solutions[sol_idx] = IkSolution { pose, feasible };
+					sol_idx += 1;
 				}
 			}
 		}
-		(solutions, count)
-	}
 
-	fn calculate_r03(&self, t1: T, t2: T, t3: T) -> Matrix3<T> {
-		let c1 = t1.cos();
-		let s1 = t1.sin();
-		let c2 = t2.cos();
-		let s2 = t2.sin();
-		let c3 = t3.cos();
-		let s3 = t3.sin();
-
-		let r01 = Matrix3::new(
-			c1,
-			-s1,
-			T::zero(),
-			s1,
-			c1,
-			T::zero(),
-			T::zero(),
-			T::zero(),
-			T::one(),
-		);
-
-		let r12 = Matrix3::new(
-			c2,
-			-s2,
-			T::zero(),
-			T::zero(),
-			T::zero(),
-			-T::one(),
-			s2,
-			c2,
-			T::zero(),
-		);
-
-		let r23 = Matrix3::new(
-			c3,
-			-s3,
-			T::zero(),
-			s3,
-			c3,
-			T::zero(),
-			T::zero(),
-			T::zero(),
-			T::one(),
-		);
-
-		r01 * r12 * r23
-	}
-
-	fn check_limits<const DOF: usize, const JOINTS: usize>(
-		&self,
-		chain: &Chain<DOF, JOINTS, T>,
-		joints: &SVector<T, DOF>,
-	) -> bool {
-		chain.iter_movable().all(|(i, _, node)| {
-			let lim = &node.joint.limits;
-			joints[i] >= lim.min && joints[i] <= lim.max
-		})
+		(solutions, sol_idx)
 	}
 }
 
-fn extract_wrist_yzy<T: RealField + Copy>(r: &Matrix3<T>) -> [(T, T, T); 2] {
-	let sy = (r[(0, 1)] * r[(0, 1)] + r[(2, 1)] * r[(2, 1)]).sqrt();
+fn rotation_0_3<T: RealField + Copy>(t1: T, t2: T, t3: T) -> Matrix3<T> {
+	let rz = rz(t1);
+	let ry2 = ry(t2);
+	let ry3 = ry(t3);
+	rz * ry2 * ry3
+}
 
-	if sy < T::default_epsilon() {
-		let t4 = T::zero();
-		let t5 = if r[(1, 1)] > T::zero() {
-			T::zero()
-		} else {
-			T::pi()
-		};
-		let t6 = r[(2, 0)].atan2(r[(0, 0)]);
-		[(t4, t5, t6), (t4, t5, t6)]
-	} else {
-		let t4_a = r[(2, 1)].atan2(r[(0, 1)]);
-		let t5_a = sy.atan2(r[(1, 1)]);
-		let t6_a = r[(1, 2)].atan2(-r[(1, 0)]);
+#[inline]
+fn rz<T: RealField + Copy>(a: T) -> Matrix3<T> {
+	let (s, c) = (a.sin(), a.cos());
+	Matrix3::new(
+		c,
+		-s,
+		T::zero(),
+		s,
+		c,
+		T::zero(),
+		T::zero(),
+		T::zero(),
+		T::one(),
+	)
+}
 
-		let t4_b = (-r[(2, 1)]).atan2(-r[(0, 1)]);
-		let t5_b = (-sy).atan2(r[(1, 1)]);
-		let t6_b = (-r[(1, 2)]).atan2(r[(1, 0)]);
+#[inline]
+fn ry<T: RealField + Copy>(a: T) -> Matrix3<T> {
+	let (s, c) = (a.sin(), a.cos());
+	Matrix3::new(
+		c,
+		T::zero(),
+		s,
+		T::zero(),
+		T::one(),
+		T::zero(),
+		-s,
+		T::zero(),
+		c,
+	)
+}
 
-		[(t4_a, t5_a, t6_a), (t4_b, t5_b, t6_b)]
+fn check_limits<T, const DOF: usize, const JOINTS: usize>(
+	pose: SVector<T, DOF>,
+	chain: &Chain<DOF, JOINTS, T>,
+) -> bool
+where
+	T: RealField + SubsetOf<f64> + Copy,
+{
+	for (idx, _, node) in chain.iter_movable() {
+		let v = pose[idx];
+		if v < node.joint.limits.min || v > node.joint.limits.max {
+			return false;
+		}
 	}
+	true
+}
+
+#[inline]
+fn wrap_pi<T: RealField + Copy>(a: T) -> T {
+	let pi = T::pi();
+	let two_pi = pi.clone() + pi.clone();
+	let mut v = a;
+	while v >= pi {
+		v = v - two_pi.clone();
+	}
+	while v < -pi.clone() {
+		v = v + two_pi.clone();
+	}
+	v
+}
+
+#[inline]
+fn atan2_flip<T: RealField + Copy>(y: T, x: T) -> T {
+	T::atan2(-y, -x)
 }
