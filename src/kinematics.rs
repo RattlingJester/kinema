@@ -43,8 +43,9 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64>> Chain<
 		}
 	}
 
+	/// Return DOF + 1 world transform (should be tool joint)
 	pub fn end_transform(&self) -> Isometry3<T> {
-		self.nodes[DOF].world_transform.clone()
+		self.nodes[DOF + 1].world_transform.clone()
 	}
 
 	pub fn joint_positions(&self) -> SVector<T, DOF> {
