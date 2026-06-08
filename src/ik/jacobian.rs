@@ -1,7 +1,7 @@
 use nalgebra::{Isometry3, RealField, SMatrix, SVector, Vector3, Vector6};
 use simba::scalar::SubsetOf;
 
-use crate::{Error, kinematics::Chain, node::NodeIDx};
+use crate::{Error, ik::IkSolver, kinematics::Chain, node::NodeIDx};
 
 /// Numerical inverse Jacobian IK solver. Still WIP, took the solution from k crate by openrr
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -12,6 +12,46 @@ pub struct JacobianIK<const JOINTS: usize, T: RealField> {
 	pub max_try:               usize,
 	#[allow(clippy::type_complexity)]
 	pub nullpace_fn:           Option<&'static (dyn Fn(&[T]) -> [T; JOINTS] + Send + Sync)>,
+	pub constraints:           Constraints<JOINTS>,
+}
+
+impl<const D: usize, const J: usize, T: RealField + SubsetOf<f64> + Copy> IkSolver<D, J, T>
+	for JacobianIK<J, T>
+{
+	fn solve(&self, chain: &mut Chain<D, J, T>, target: Isometry3<T>) -> Result<(), Error> {
+		let op_space = self.constraints.operational_space();
+		let orig_positions = chain.joint_positions();
+
+		let mut last_target_distance = None;
+
+		let mut ignored_joints = [0_usize; J];
+		for (count, joint) in self.constraints.ignored_joints.iter().flatten().enumerate() {
+			ignored_joints[count] = *joint;
+		}
+
+		for _ in 0..self.max_try {
+			let target_diff = self.iteration(chain, target, op_space, &ignored_joints)?;
+			let (len_diff, rot_diff) = target_diff_to_len_rot_diff(&target_diff, op_space);
+			if len_diff.norm() < self.allowable_error_dist
+				&& rot_diff.norm() < self.allowable_error_angle
+			{
+				let non_checked_positions = chain.joint_positions();
+				chain.set_joint_positions_clamped(non_checked_positions)?;
+				chain.update_transforms();
+				return Ok(());
+			}
+			last_target_distance = Some((len_diff, rot_diff));
+		}
+
+		chain.set_joint_positions(orig_positions)?;
+		chain.update_transforms();
+
+		Err(Error::IkNotConverged {
+			tries:    self.max_try,
+			pos_diff: nalgebra::try_convert(last_target_distance.as_ref().unwrap().0).unwrap(),
+			rot_diff: nalgebra::try_convert(last_target_distance.as_ref().unwrap().1).unwrap(),
+		})
+	}
 }
 
 impl<const J: usize, T: RealField + SubsetOf<f64> + Copy> Default for JacobianIK<J, T> {
@@ -21,6 +61,7 @@ impl<const J: usize, T: RealField + SubsetOf<f64> + Copy> Default for JacobianIK
 			nalgebra::convert(0.1),
 			nalgebra::convert(1.0),
 			1000,
+			Constraints::default(),
 		)
 	}
 }
@@ -31,6 +72,7 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 		allowable_error_angle: T,
 		jacobian_mult: T,
 		max_tries: usize,
+		constraints: Constraints<JOINTS>,
 	) -> Self {
 		Self {
 			allowable_error_dist,
@@ -38,6 +80,7 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 			jacobian_mult,
 			max_try: max_tries,
 			nullpace_fn: None,
+			constraints,
 		}
 	}
 
@@ -77,7 +120,7 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 			}
 		}
 
-		let mut d_q = SVector::<T, DOF>::zeros();
+		let mut d_q = SVector::zeros();
 
 		if available_dof > required_dof {
 			// Redundant system: Solve via Damped Least Squares (DLS) Pseudo-Inverse
@@ -148,46 +191,6 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 			&chain.end_transform(),
 			op_space,
 		))
-	}
-
-	pub fn solve<const DOF: usize>(
-		&self,
-		chain: &mut Chain<DOF, JOINTS, T>,
-		target: Isometry3<T>,
-		constraints: &Constraints<JOINTS>,
-	) -> Result<(), Error> {
-		let op_space = constraints.operational_space();
-		let orig_positions = chain.joint_positions();
-
-		let mut last_target_distance = None;
-
-		let mut ignored_joints = [0_usize; JOINTS];
-		for (count, joint) in constraints.ignored_joints.iter().flatten().enumerate() {
-			ignored_joints[count] = *joint;
-		}
-
-		for _ in 0..self.max_try {
-			let target_diff = self.iteration(chain, target, op_space, &ignored_joints)?;
-			let (len_diff, rot_diff) = target_diff_to_len_rot_diff(&target_diff, op_space);
-			if len_diff.norm() < self.allowable_error_dist
-				&& rot_diff.norm() < self.allowable_error_angle
-			{
-				let non_checked_positions = chain.joint_positions();
-				chain.set_joint_positions_clamped(non_checked_positions)?;
-				chain.update_transforms();
-				return Ok(());
-			}
-			last_target_distance = Some((len_diff, rot_diff));
-		}
-
-		chain.set_joint_positions(orig_positions)?;
-		chain.update_transforms();
-
-		Err(Error::IkNotConverged {
-			tries:    self.max_try,
-			pos_diff: nalgebra::try_convert(last_target_distance.as_ref().unwrap().0).unwrap(),
-			rot_diff: nalgebra::try_convert(last_target_distance.as_ref().unwrap().1).unwrap(),
-		})
 	}
 }
 

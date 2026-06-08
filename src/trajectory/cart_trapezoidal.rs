@@ -1,11 +1,7 @@
 use nalgebra::{Isometry3, RealField, SVector, SimdPartialOrd};
 use simba::scalar::SubsetOf;
 
-use crate::{
-	Error,
-	ik::{Constraints, JacobianIK},
-	kinematics::Chain,
-};
+use crate::{Error, ik::IkSolver, kinematics::Chain};
 
 /// Trapezoidal profile for interpolated cartesian move.
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -57,8 +53,7 @@ impl<
 		end: Isometry3<T>,
 		speed_frac: T,
 		acc: T,
-		ik: &JacobianIK<JOINTS, T>,
-		constraints: Constraints<JOINTS>,
+		ik: &impl IkSolver<DOF, JOINTS, T>,
 	) -> Result<Self, Error> {
 		let orig_pos = chain.joint_positions();
 
@@ -83,7 +78,7 @@ impl<
 			}
 
 			#[cfg(not(feature = "debug"))]
-			if let Err(e) = ik.solve(chain, target, &constraints) {
+			if let Err(e) = ik.solve(chain, target) {
 				chain.set_joint_positions(orig_pos)?;
 				return Err(e);
 			}
