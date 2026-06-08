@@ -135,6 +135,7 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 		let mut count = 0;
 
 		let two: T = nalgebra::convert(2.0);
+
 		let r = target.rotation.to_rotation_matrix();
 		let p = target.translation.vector;
 
@@ -149,7 +150,6 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 
 		for &theta1 in &[theta1_a, theta1_b] {
 			let r_xy = wx * theta1.cos() + wy * theta1.sin() - self.a1;
-
 			let z2 = wz - self.d1;
 
 			let d_sw_sq = r_xy * r_xy + z2 * z2;
@@ -166,9 +166,9 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 			for &sin_theta3 in &[sin_theta3_pos, -sin_theta3_pos] {
 				let theta3 = sin_theta3.atan2(cos_theta3);
 
-				let k1 = self.a2 + self.a3 * sin_theta3;
-				let k2 = self.a3 * cos_theta3;
-				let theta2 = r_xy.atan2(z2) - k1.atan2(k2);
+				let k1 = self.a2 + self.a3 * cos_theta3;
+				let k2 = self.a3 * sin_theta3;
+				let theta2 = z2.atan2(r_xy) - k2.atan2(k1);
 
 				let r03 = self.calculate_r03(theta1, theta2, theta3);
 				let r36 = r03.transpose() * r.matrix();
@@ -198,9 +198,12 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 	}
 
 	fn calculate_r03(&self, t1: T, t2: T, t3: T) -> Matrix3<T> {
-		let (c1, s1) = (t1.cos(), t1.sin());
-		let (c2, s2) = (t2.cos(), t2.sin());
-		let (c3, s3) = (t3.cos(), t3.sin());
+		let c1 = t1.cos();
+		let s1 = t1.sin();
+		let c2 = t2.cos();
+		let s2 = t2.sin();
+		let c3 = t3.cos();
+		let s3 = t3.sin();
 
 		let r01 = Matrix3::new(
 			c1,
@@ -214,29 +217,17 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 			T::one(),
 		);
 
-		let r12_fixed = Matrix3::new(
-			T::one(),
-			T::zero(),
+		let r12 = Matrix3::new(
+			c2,
+			-s2,
 			T::zero(),
 			T::zero(),
 			T::zero(),
 			-T::one(),
-			T::zero(),
-			T::one(),
-			T::zero(),
-		);
-		let r12_joint = Matrix3::new(
-			c2,
-			-s2,
-			T::zero(),
 			s2,
 			c2,
 			T::zero(),
-			T::zero(),
-			T::zero(),
-			T::one(),
 		);
-		let r12 = r12_fixed * r12_joint;
 
 		let r23 = Matrix3::new(
 			c3,
