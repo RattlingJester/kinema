@@ -3,7 +3,7 @@ use simba::scalar::SubsetOf;
 
 use crate::{Error, ik::IkSolver, kinematics::Chain};
 
-/// Numerical inverse Jacobian IK solver. Still WIP, took the solution from k crate by openrr
+/// Numerical inverse Jacobian IK solver.
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct JacobianIK<const JOINTS: usize, T: RealField> {
 	pub allowable_error_dist:  T,
@@ -23,7 +23,15 @@ impl<const D: usize, const J: usize, T: RealField + SubsetOf<f64> + Copy> IkSolv
 
 		for _ in 0..self.max_try {
 			let target_diff = self.iteration(chain, target)?;
-			let (len_diff, rot_diff) = target_diff_to_len_rot_diff(&target_diff);
+
+			let mut target_diff_6 = Vector6::<T>::zeros();
+			let c_max = if J < 6 { J } else { 6 };
+			for i in 0..c_max {
+				target_diff_6[i] = target_diff[i].clone();
+			}
+
+			let (len_diff, rot_diff) = target_diff_to_len_rot_diff(&target_diff_6);
+
 			if len_diff.norm() < self.allowable_error_dist
 				&& rot_diff.norm() < self.allowable_error_angle
 			{
@@ -73,70 +81,110 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 		}
 	}
 
-	fn iteration<const DOF: usize>(
+	fn iteration<const DOF: usize, const TASK_SPACE: usize>(
 		&self,
-		chain: &mut Chain<DOF, JOINTS, T>,
+		chain: &mut Chain<DOF, TASK_SPACE, T>,
 		target: Isometry3<T>,
-	) -> Result<Vector6<T>, Error> {
+	) -> Result<SVector<T, TASK_SPACE>, Error> {
 		let orig_positions = chain.joint_positions();
-
 		let err = calc_pose_diff(&target, &chain.end_transform());
+		let jacobi = chain.jacobian(); // Shape matches active parameters: SMatrix<T, TASK_SPACE, JOINTS>
 
-		let jacobi = chain.jacobian(); // Expected shape: smatrix<T, 6, DOF>
+		let mut jacobi_6x6 = SMatrix::<T, 6, 6>::zeros();
+		let active_cols = if JOINTS < 6 { JOINTS } else { 6 };
+		let active_rows = if TASK_SPACE < 6 { TASK_SPACE } else { 6 };
 
-		let mut d_q = SVector::zeros();
-
-		if DOF > 6 {
-			// Redundant system: J_pinv = J^T * (J * J^T + lambda^2 * I)^-1
-			// (J * J^T) is always a fixed 6x6 matrix regardless of your joint count!
-			let eps: T = nalgebra::convert(0.01); // Damping factor to handle 3D singularities
-			let lambda_sq = eps * eps;
-
-			let mut jj_t = jacobi * jacobi.transpose(); // 6x6 Matrix
-			for i in 0..6 {
-				jj_t[(i, i)] += lambda_sq;
+		for r in 0..active_rows {
+			for c in 0..active_cols {
+				jacobi_6x6[(r, c)] = jacobi[(r, c)].clone();
 			}
-
-			let jj_t_inv = jj_t.try_inverse().ok_or(Error::MathError)?;
-			let jacobi_pinv = jacobi.transpose() * jj_t_inv; // DOF x 6 Matrix
-
-			match &self.nullpace_fn {
-				Some(f) => {
-					let subtask = SVector::from_row_slice(&f(orig_positions.as_slice()));
-					let identity = SMatrix::identity();
-					let projector = identity - (jacobi_pinv * jacobi);
-					d_q = (jacobi_pinv * err) + (projector * subtask);
-				}
-				None => {
-					d_q = jacobi_pinv * err;
-				}
-			}
-		} else {
-			// Square or Under-determined system (DOF <= 6): J_pinv = (J^T * J + lambda^2 * I)^-1 * J^T
-			// (J^T * J) is a fixed DOF x DOF matrix
-			let eps: T = nalgebra::convert(0.01);
-			let lambda_sq = eps * eps;
-
-			let mut j_t_j = jacobi.transpose() * jacobi; // DOF x DOF Matrix
-			for i in 0..DOF {
-				j_t_j[(i, i)] += lambda_sq;
-			}
-
-			let j_t_j_inv = j_t_j.try_inverse().ok_or(Error::MathError)?;
-			d_q = j_t_j_inv * jacobi.transpose() * err;
 		}
 
-		// 4. Update configuration space
-		let mut positions_vec = SVector::zeros();
-		for i in 0..DOF {
-			positions_vec[i] = orig_positions[i] + self.jacobian_mult * d_q[i];
+		let svd = jacobi_6x6.svd(true, true);
+		let u = svd.u.ok_or(Error::MathError)?;
+		let v_t = svd.v_t.ok_or(Error::MathError)?;
+		let singular_values = svd.singular_values;
+
+		let eps_machine = T::default_epsilon();
+		let eps_factor: T = nalgebra::convert(100.0);
+		let tolerance = eps_machine * eps_factor;
+		let lambda_max: T = nalgebra::convert(0.15);
+
+		let mut s_pinv = SMatrix::<T, 6, 6>::zeros();
+		for i in 0..6 {
+			let sigma = singular_values[i].clone();
+			let lambda_sq = if sigma < tolerance {
+				let ratio = sigma.clone() / tolerance.clone();
+				let lambda = lambda_max.clone() * (T::one() - ratio);
+				lambda.clone() * lambda
+			} else {
+				T::zero()
+			};
+
+			let denominator = (sigma.clone() * sigma.clone()) + lambda_sq;
+			if denominator > T::zero() {
+				s_pinv[(i, i)] = sigma / denominator;
+			}
+		}
+
+		let jacobi_pinv_6x6 = v_t.transpose() * s_pinv * u.transpose();
+		let d_q_6 = &jacobi_pinv_6x6 * &err;
+
+		let mut d_q = SVector::<T, JOINTS>::zeros();
+		for i in 0..active_cols {
+			d_q[i] = d_q_6[i].clone();
+		}
+
+		if DOF > 6 {
+			if let Some(f) = &self.nullpace_fn {
+				let subtask = SVector::<T, DOF>::from_row_slice(&f(orig_positions.as_slice()));
+
+				let mut j_pinv_j = SMatrix::<T, JOINTS, JOINTS>::zeros();
+				for r in 0..active_cols {
+					for c in 0..JOINTS {
+						let mut sum = T::zero();
+						for k in 0..active_rows {
+							sum += jacobi_pinv_6x6[(r, k)].clone() * jacobi[(k, c)].clone();
+						}
+						j_pinv_j[(r, c)] = sum;
+					}
+				}
+
+				for r in 0..JOINTS {
+					let mut projector_row_sum = T::zero();
+					for c in 0..JOINTS {
+						let mut proj_elem = -j_pinv_j[(r, c)].clone();
+						if r == c {
+							proj_elem += T::one();
+						}
+						projector_row_sum += proj_elem * subtask[c].clone();
+					}
+					d_q[r] += projector_row_sum;
+				}
+			}
+		}
+
+		let max_joint_step: T = nalgebra::convert(0.05);
+		let mut positions_vec = SVector::<T, DOF>::zeros();
+		for i in 0..JOINTS {
+			let mut delta = self.jacobian_mult.clone() * d_q[i].clone();
+			if delta > max_joint_step {
+				delta = max_joint_step.clone();
+			} else if delta < -max_joint_step {
+				delta = -max_joint_step.clone();
+			}
+			positions_vec[i] = orig_positions[i].clone() + delta;
 		}
 
 		chain.set_joint_positions_clamped(positions_vec);
 		chain.update_transforms();
 
-		// 5. Return target differences for convergence checks
-		Ok(calc_pose_diff(&target, &chain.end_transform()))
+		let full_diff = calc_pose_diff(&target, &chain.end_transform());
+		let mut out_diff = SVector::<T, TASK_SPACE>::zeros();
+		for i in 0..active_rows {
+			out_diff[i] = full_diff[i].clone();
+		}
+		Ok(out_diff)
 	}
 }
 
@@ -159,6 +207,7 @@ fn target_diff_to_len_rot_diff<T: RealField>(target_diff: &Vector6<T>) -> (Vecto
 fn calc_pose_diff<T: RealField>(a: &Isometry3<T>, b: &Isometry3<T>) -> Vector6<T> {
 	let p_diff = a.translation.vector.clone() - b.translation.vector.clone();
 	let w_diff = b.rotation.rotation_to(&a.rotation).scaled_axis();
+
 	Vector6::new(
 		p_diff[0].clone(),
 		p_diff[1].clone(),
@@ -167,23 +216,4 @@ fn calc_pose_diff<T: RealField>(a: &Isometry3<T>, b: &Isometry3<T>) -> Vector6<T
 		w_diff[1].clone(),
 		w_diff[2].clone(),
 	)
-}
-
-/// Utility function to create nullspace function using reference joint positions.
-///
-/// H(q) = 1/2(q-q^)T W (q-q^)
-/// dH(q) / dq = W (q-q^)
-///
-/// Taken from k crate
-pub fn create_reference_positions_nullspace_function<const DOF: usize, T: RealField + Copy>(
-	reference_positions: SVector<T, DOF>,
-	weight_vector: SVector<T, DOF>,
-) -> impl Fn(&[T]) -> [T; DOF] {
-	move |positions| {
-		let mut derivative_vec = [T::zero(); DOF];
-		for i in 0..DOF {
-			derivative_vec[i] = weight_vector[i] * (positions[i] - reference_positions[i]);
-		}
-		derivative_vec
-	}
 }
