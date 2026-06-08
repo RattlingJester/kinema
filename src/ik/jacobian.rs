@@ -4,6 +4,7 @@ use simba::scalar::SubsetOf;
 use crate::{Error, ik::IkSolver, kinematics::Chain};
 
 /// Numerical inverse Jacobian IK solver.
+/// Suitable only for manipulators with DOF <= 6
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct JacobianIK<const JOINTS: usize, T: RealField> {
 	/// Acceptable linear distance error threshold to the target destination in meters
@@ -107,8 +108,8 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 		let jacobi = chain.jacobian();
 		let mut jacobi_6x6 = SMatrix::<T, 6, 6>::zeros();
 
-		for r in 0..JOINTS {
-			for c in 0..JOINTS {
+		for r in 0..DOF {
+			for c in 0..DOF {
 				jacobi_6x6[(r, c)] = jacobi[(r, c)];
 			}
 		}
