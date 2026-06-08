@@ -9,10 +9,7 @@ use crate::{
 	node::{Node, NodeIDx},
 };
 #[cfg(feature = "urdf")]
-use crate::{
-	joint::{Joint, JointLimit},
-	node::Link,
-};
+use crate::{joint::Joint, node::Link};
 
 /// DOF   = number of movable joints
 /// JOINTS = DOF + 1 (root node counts too)
