@@ -159,44 +159,41 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 	) -> ([IkSolution<T>; 8], usize) {
 		let mut solutions: [IkSolution<T>; 8] = core::array::from_fn(|_| IkSolution::default());
 		let mut count = 0;
-
 		let two: T = nalgebra::convert(2.0);
 
 		let r = target.rotation.to_rotation_matrix();
 		let p = target.translation.vector;
 
+		// Calculate Wrist Center (WC)
 		let approach = r.matrix().column(2).into_owned();
 		let wrist_center = p - approach * self.d[5];
-
 		let wx = wrist_center[0];
 		let wy = wrist_center[1];
 		let wz = wrist_center[2];
 
-		#[cfg(feature = "debug")]
-		eprintln!("wrist_center: [{wx:.4}, {wy:.4}, {wz:.4}]");
-
+		// Solve Theta 1 (Two possible base directions)
 		let theta1_a = wy.atan2(wx);
 		let theta1_b = theta1_a + T::pi();
 
 		for &theta1 in &[theta1_a, theta1_b] {
-			let r_xy = (wx * wx + wy * wy).sqrt() - self.a[0];
-			let z2 = wz - self.d[0];
+			// Project wrist center into the plane of the current theta1 link frame
+			let r_wrist = (wx * wx + wy * wy).sqrt();
+			let r_xy = if (theta1 - theta1_a).abs() < nalgebra::convert(1e-5) {
+				r_wrist - self.a[0]
+			} else {
+				-r_wrist - self.a[0]
+			};
 
+			let z2 = wz - self.d[0];
 			let a2 = self.a[1];
 			let a3 = self.a[2];
 
+			// Solve Theta 3 (Elbow up / Elbow down)
 			let d_sw_sq = r_xy * r_xy + z2 * z2;
-
 			let cos_theta3 = (d_sw_sq - a2 * a2 - a3 * a3) / (two * a2 * a3);
 
-			#[cfg(feature = "debug")]
-			eprintln!(
-				"theta1={theta1:.4}, r_xy={r_xy:.4}, z2={z2:.4}, d_sw={:.4}, cos_theta3={cos_theta3:.4}",
-				d_sw_sq.sqrt()
-			);
-
 			if cos_theta3 < nalgebra::convert(-1.0) || cos_theta3 > T::one() {
-				continue;
+				continue; // Target is out of reach for this arm configuration
 			}
 
 			let sin_theta3_pos = (T::one() - cos_theta3 * cos_theta3).sqrt();
@@ -204,24 +201,19 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 			for &sin_theta3 in &[sin_theta3_pos, -sin_theta3_pos] {
 				let theta3 = sin_theta3.atan2(cos_theta3);
 
+				// Solve Theta 2
 				let k1 = a2 + a3 * cos_theta3;
 				let k2 = a3 * sin_theta3;
-				let theta2 = r_xy.atan2(z2) - k2.atan2(k1);
+				let theta2 = z2.atan2(r_xy) - k2.atan2(k1); // Standard geometric projection
 
+				// Orient the wrist using ZYZ Euler extraction
 				let r03 = self.r03(theta1, theta2, theta3);
 				let r36 = r03.transpose() * r.matrix();
 
-				let (theta4, theta5, theta6) = euler_zyz(&r36);
+				// Extract the two valid analytical ZYZ configurations for the wrist
+				let wrist_options = Self::extract_euler_zyz_pairs(&r36);
 
-				for &t5 in &[theta5, -theta5] {
-					let (t4, t6) = if t5.abs() < nalgebra::convert(1e-6_f64) {
-						(T::zero(), (-r36[(0, 1)]).atan2(r36[(0, 0)]))
-					} else if t5 == theta5 {
-						(theta4, theta6)
-					} else {
-						(theta4 + T::pi(), theta6 + T::pi())
-					};
-
+				for (t4, t5, t6) in wrist_options {
 					if count < 8 {
 						let mut pose = SVector::<T, 6>::zeros();
 						pose[0] = theta1;
@@ -240,7 +232,6 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 				}
 			}
 		}
-
 		(solutions, count)
 	}
 
@@ -249,6 +240,29 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 		let r2 = Rotation3::from_axis_angle(&Vector3::y_axis(), t2);
 		let r3 = Rotation3::from_axis_angle(&Vector3::y_axis(), t3);
 		(r1 * r2 * r3).into_inner()
+	}
+
+	fn extract_euler_zyz_pairs(r: &Matrix3<T>) -> [(T, T, T); 2] {
+		let zero = T::zero();
+		let pi = T::pi();
+
+		if r[(2, 2)].abs() > nalgebra::convert(0.99999) {
+			let t5 = if r[(2, 2)] > zero { zero } else { pi };
+			let t4 = zero;
+			let t6 = (-r[(0, 1)]).atan2(r[(0, 0)]);
+			return [(t4, t5, t6), (t4, t5, t6)];
+		}
+
+		let t5_a = r[(2, 2)].acos();
+		let t5_b = -t5_a;
+
+		let t4_a = r[(1, 2)].atan2(r[(0, 2)]);
+		let t6_a = r[(2, 1)].atan2(-r[(2, 0)]);
+
+		let t4_b = t4_a + pi;
+		let t6_b = t6_a + pi;
+
+		[(t4_a, t5_a, t6_a), (t4_b, t5_b, t6_b)]
 	}
 
 	fn check_limits<const DOF: usize, const JOINTS: usize>(
