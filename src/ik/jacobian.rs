@@ -143,7 +143,7 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 		let d_q_6 = &jacobi_pinv_6x6 * &err;
 
 		let mut d_q = SVector::<T, JOINTS>::zeros();
-		for i in 0..JOINTS {
+		for i in 0..DOF {
 			d_q[i] = d_q_6[i];
 		}
 
@@ -163,7 +163,7 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 
 		let full_diff = calc_pose_diff(&target, &chain.end_transform());
 		let mut out_diff = SVector::<T, DOF>::zeros();
-		for i in 0..JOINTS {
+		for i in 0..DOF {
 			out_diff[i] = full_diff[i];
 		}
 
