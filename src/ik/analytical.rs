@@ -83,47 +83,6 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 		Self { d, a, alpha }
 	}
 
-	pub fn from_chain(chain: &Chain<6, 7, T>) -> Self {
-		let mut d = [T::zero(); 6];
-		let mut a = [T::zero(); 6];
-		let mut alpha = [T::zero(); 6];
-
-		for (i, _, node) in chain.iter_movable() {
-			let origin = &node.joint.origin;
-			let t = origin.translation.vector;
-			let t_dh = origin.rotation.inverse() * t;
-
-			#[cfg(feature = "debug")]
-			eprintln!(
-				"joint {i}: raw_t=[{:.4},{:.4},{:.4}] dh_t=[{:.4},{:.4},{:.4}]",
-				nalgebra::try_convert::<T, f64>(t[0]).unwrap(),
-				nalgebra::try_convert::<T, f64>(t[1]).unwrap(),
-				nalgebra::try_convert::<T, f64>(t[2]).unwrap(),
-				nalgebra::try_convert::<T, f64>(t_dh[0]).unwrap(),
-				nalgebra::try_convert::<T, f64>(t_dh[1]).unwrap(),
-				nalgebra::try_convert::<T, f64>(t_dh[2]).unwrap(),
-			);
-		}
-
-		#[cfg(feature = "debug")]
-		{
-			eprintln!(
-				"d:     {:.4?}",
-				d.map(|v| nalgebra::try_convert::<T, f64>(v).unwrap())
-			);
-			eprintln!(
-				"a:     {:.4?}",
-				a.map(|v| nalgebra::try_convert::<T, f64>(v).unwrap())
-			);
-			eprintln!(
-				"alpha: {:.4?}",
-				alpha.map(|v| nalgebra::try_convert::<T, f64>(v).unwrap())
-			);
-		}
-
-		Self { d, a, alpha }
-	}
-
 	// pub fn from_chain<const DOF: usize, const JOINTS: usize>(
 	// 	chain: &Chain<DOF, JOINTS, T>,
 	// ) -> Self {
