@@ -10,8 +10,6 @@ pub struct JacobianIK<const JOINTS: usize, T: RealField> {
 	pub allowable_error_angle: T,
 	pub jacobian_mult:         T,
 	pub max_try:               usize,
-	#[allow(clippy::type_complexity)]
-	pub nullpace_fn:           Option<&'static (dyn Fn(&[T]) -> [T; JOINTS] + Send + Sync)>,
 }
 
 impl<const D: usize, const J: usize, T: RealField + SubsetOf<f64> + Copy> IkSolver<D, J, T>
@@ -77,25 +75,22 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 			allowable_error_angle,
 			jacobian_mult,
 			max_try: max_tries,
-			nullpace_fn: None,
 		}
 	}
 
-	fn iteration<const DOF: usize, const TASK_SPACE: usize>(
+	fn iteration<const DOF: usize>(
 		&self,
-		chain: &mut Chain<DOF, TASK_SPACE, T>,
+		chain: &mut Chain<DOF, JOINTS, T>,
 		target: Isometry3<T>,
-	) -> Result<SVector<T, TASK_SPACE>, Error> {
+	) -> Result<SVector<T, DOF>, Error> {
 		let orig_positions = chain.joint_positions();
 		let err = calc_pose_diff(&target, &chain.end_transform());
 		let jacobi = chain.jacobian(); // Shape matches active parameters: SMatrix<T, TASK_SPACE, JOINTS>
 
 		let mut jacobi_6x6 = SMatrix::<T, 6, 6>::zeros();
-		let active_cols = if JOINTS < 6 { JOINTS } else { 6 };
-		let active_rows = if TASK_SPACE < 6 { TASK_SPACE } else { 6 };
 
-		for r in 0..active_rows {
-			for c in 0..active_cols {
+		for r in 0..JOINTS {
+			for c in 0..JOINTS {
 				jacobi_6x6[(r, c)] = jacobi[(r, c)].clone();
 			}
 		}
@@ -131,37 +126,8 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 		let d_q_6 = &jacobi_pinv_6x6 * &err;
 
 		let mut d_q = SVector::<T, JOINTS>::zeros();
-		for i in 0..active_cols {
+		for i in 0..JOINTS {
 			d_q[i] = d_q_6[i].clone();
-		}
-
-		if DOF > 6 {
-			if let Some(f) = &self.nullpace_fn {
-				let subtask = SVector::<T, DOF>::from_row_slice(&f(orig_positions.as_slice()));
-
-				let mut j_pinv_j = SMatrix::<T, JOINTS, JOINTS>::zeros();
-				for r in 0..active_cols {
-					for c in 0..JOINTS {
-						let mut sum = T::zero();
-						for k in 0..active_rows {
-							sum += jacobi_pinv_6x6[(r, k)].clone() * jacobi[(k, c)].clone();
-						}
-						j_pinv_j[(r, c)] = sum;
-					}
-				}
-
-				for r in 0..DOF {
-					let mut projector_row_sum = T::zero();
-					for c in 0..JOINTS {
-						let mut proj_elem = -j_pinv_j[(r, c)].clone();
-						if r == c {
-							proj_elem += T::one();
-						}
-						projector_row_sum += proj_elem * subtask[c].clone();
-					}
-					d_q[r] += projector_row_sum;
-				}
-			}
 		}
 
 		let max_joint_step: T = nalgebra::convert(0.05);
@@ -180,8 +146,8 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 		chain.update_transforms();
 
 		let full_diff = calc_pose_diff(&target, &chain.end_transform());
-		let mut out_diff = SVector::<T, TASK_SPACE>::zeros();
-		for i in 0..active_rows {
+		let mut out_diff = SVector::<T, DOF>::zeros();
+		for i in 0..JOINTS {
 			out_diff[i] = full_diff[i].clone();
 		}
 		Ok(out_diff)
