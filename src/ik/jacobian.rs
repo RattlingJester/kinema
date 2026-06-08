@@ -150,7 +150,7 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 					}
 				}
 
-				for r in 0..JOINTS {
+				for r in 0..DOF {
 					let mut projector_row_sum = T::zero();
 					for c in 0..JOINTS {
 						let mut proj_elem = -j_pinv_j[(r, c)].clone();
@@ -166,7 +166,7 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 
 		let max_joint_step: T = nalgebra::convert(0.05);
 		let mut positions_vec = SVector::<T, DOF>::zeros();
-		for i in 0..JOINTS {
+		for i in 0..DOF {
 			let mut delta = self.jacobian_mult.clone() * d_q[i].clone();
 			if delta > max_joint_step {
 				delta = max_joint_step.clone();
