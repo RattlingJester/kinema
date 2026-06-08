@@ -3,6 +3,11 @@ use simba::scalar::SubsetOf;
 
 use crate::{Error, ik::IkSolver, kinematics::Chain};
 
+// 6-DOF ARM
+const DOF: usize = 6;
+// Root node + 6 joints + tool joint
+const JOINTS: usize = 8;
+
 /// Closed-form analytical IK solver for 6-DOF manipulators with spherical wrist
 /// Assumptions:
 ///   - Joint 1: base rotation about Z
@@ -24,8 +29,8 @@ pub struct AnalyticalIK<T: RealField + SubsetOf<f64> + Copy> {
 	pub alpha: [T; 6],
 }
 
-impl<T: RealField + SubsetOf<f64> + Copy> IkSolver<6, 7, T> for AnalyticalIK<T> {
-	fn solve(&self, chain: &mut Chain<6, 7, T>, target: Isometry3<T>) -> Result<(), Error> {
+impl<T: RealField + SubsetOf<f64> + Copy> IkSolver<DOF, JOINTS, T> for AnalyticalIK<T> {
+	fn solve(&self, chain: &mut Chain<DOF, JOINTS, T>, target: Isometry3<T>) -> Result<(), Error> {
 		let orig_pos = chain.joint_positions();
 
 		let solution = self.solve_closest(&target, chain);
@@ -83,42 +88,32 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 		Self { d, a, alpha }
 	}
 
-	// pub fn from_chain<const DOF: usize, const JOINTS: usize>(
-	// 	chain: &Chain<DOF, JOINTS, T>,
-	// ) -> Self {
-	// 	let mut d = [T::zero(); 6];
-	// 	let mut a = [T::zero(); 6];
-	// 	let mut alpha = [T::zero(); 6];
+	pub fn from_chain<const DOF: usize, const JOINTS: usize>(
+		chain: &Chain<DOF, JOINTS, T>,
+	) -> Self {
+		let mut d = [T::zero(); 6];
+		let mut a = [T::zero(); 6];
+		let mut alpha = [T::zero(); 6];
 
-	// 	for (i, _, node) in chain.iter_movable() {
-	// 		let origin = &node.joint.origin;
+		for (i, _, node) in chain.iter_movable() {
+			let origin = &node.joint.origin;
 
-	// 		// a_i: translation along X of the joint origin
-	// 		a[i] = origin.translation.vector[0];
-	// 		// d_i: translation along Z of the joint origin
-	// 		d[i] = origin.translation.vector[2];
-	// 		// alpha_i: rotation about X (twist angle)
-	// 		let euler = origin.rotation.euler_angles();
-	// 		alpha[i] = euler.0; // roll = rotation about X
-	// 	}
+			a[i] = origin.translation.vector.x;
+			d[i] = origin.translation.vector.z;
 
-	// 	#[cfg(feature = "debug")]
-	// 	{
-	// 		eprintln!("d:     {:?}", d.map(|v| v));
-	// 		eprintln!("a:     {:?}", a.map(|v| v));
-	// 		eprintln!("alpha: {:?}", alpha.map(|v| v));
-	// 		eprintln!("wrist center from start: ...");
-	// 	}
+			let (roll, _, _) = origin.rotation.euler_angles();
+			alpha[i] = roll;
+		}
 
-	// 	Self { d, a, alpha }
-	// }
+		Self { d, a, alpha }
+	}
 
 	/// Example solution selection strategy. Selects solution closest to current pose
 	pub fn solve_closest(
 		&self,
 		target: &Isometry3<T>,
-		chain: &mut Chain<6, 7, T>,
-	) -> Option<SVector<T, 6>> {
+		chain: &mut Chain<DOF, JOINTS, T>,
+	) -> Option<SVector<T, DOF>> {
 		let current = chain.joint_positions();
 		let (solutions, count) = self.solve(target, chain);
 
@@ -155,7 +150,7 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 	pub fn solve(
 		&self,
 		target: &Isometry3<T>,
-		chain: &Chain<6, 7, T>,
+		chain: &Chain<DOF, JOINTS, T>,
 	) -> ([IkSolution<T>; 8], usize) {
 		let mut solutions: [IkSolution<T>; 8] = core::array::from_fn(|_| IkSolution::default());
 		let mut count = 0;
@@ -165,21 +160,21 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 		let r = target.rotation.to_rotation_matrix();
 		let p = target.translation.vector;
 
-		let normal = r.matrix().column(0).into_owned();
-		let wrist_center = p - normal * self.a[5];
+		let z6 = r.matrix().column(2).into_owned();
+		let wrist_center = p - z6 * self.d[5];
 
 		let wx = wrist_center[0];
 		let wy = wrist_center[1];
 		let wz = wrist_center[2];
 
-		let l1 = self.d[2]; // upper arm length
-		let l2 = self.d[4]; // forearm length
+		let l1 = self.a[1];
+		let l2 = self.a[2];
 
 		let theta1_a = wy.atan2(wx);
 		let theta1_b = theta1_a + T::pi();
 
 		for &theta1 in &[theta1_a, theta1_b] {
-			let r_xy = (wx * wx + wy * wy).sqrt() - self.a[1];
+			let r_xy = (wx * wx + wy * wy).sqrt() - self.a[0];
 			let z2 = wz - self.d[0];
 
 			let d_sw_sq = r_xy * r_xy + z2 * z2;
@@ -191,9 +186,11 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 				d_sw_sq.sqrt()
 			);
 
-			if cos_theta3 < nalgebra::convert(-1.0) || cos_theta3 > T::one() {
-				continue;
-			}
+			// if cos_theta3 < nalgebra::convert(-1.0) || cos_theta3 > T::one() {
+			// 	continue;
+			// }
+
+			let cos_theta3 = cos_theta3.max(-T::one()).min(T::one());
 
 			let sin_theta3_pos = (T::one() - cos_theta3 * cos_theta3).sqrt();
 
@@ -210,7 +207,7 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 				let (theta4, theta5, theta6) = euler_zyz(&r36);
 
 				for &t5 in &[theta5, -theta5] {
-					let (t4, t6) = if t5.abs() < nalgebra::convert(1e-6_f64) {
+					let (t4, t6) = if t5.abs() < T::default_epsilon() {
 						(T::zero(), (-r36[(0, 1)]).atan2(r36[(0, 0)]))
 					} else if t5 == theta5 {
 						(theta4, theta6)
@@ -275,7 +272,7 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 fn euler_zyz<T: RealField + Copy>(r: &Matrix3<T>) -> (T, T, T) {
 	let sy = (r[(0, 2)] * r[(0, 2)] + r[(1, 2)] * r[(1, 2)]).sqrt();
 
-	let singular = sy < nalgebra::convert(1e-6_f64);
+	let singular = sy < T::default_epsilon();
 
 	if singular {
 		let a = T::zero();
