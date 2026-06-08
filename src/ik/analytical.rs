@@ -107,9 +107,9 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 
 		#[cfg(feature = "debug")]
 		{
-			dbg!(a);
-			dbg!(d);
-			dbg!(alpha);
+			eprintln!("d: {d:#?}");
+			eprintln!("a: {a:#?}");
+			eprintln!("alpha: {alpha:#?}");
 		}
 
 		Self { d, a, alpha }
