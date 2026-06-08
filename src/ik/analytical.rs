@@ -90,16 +90,15 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 
 		for (i, _, node) in chain.iter_movable() {
 			let origin = &node.joint.origin;
-			let euler = origin.rotation.euler_angles();
 
-			alpha[i] = euler.0;
-
-			let r_alpha_inv =
-				nalgebra::Rotation3::from_axis_angle(&nalgebra::Vector3::x_axis(), -euler.0);
-			let t_dh = r_alpha_inv * origin.translation.vector;
+			// Undo the joint origin rotation to get translation in DH frame
+			let t_dh = origin.rotation.inverse() * origin.translation.vector;
 
 			a[i] = t_dh[0];
 			d[i] = t_dh[2];
+
+			let r = origin.rotation.to_rotation_matrix();
+			alpha[i] = (-r[(1, 2)]).atan2(r[(2, 2)]);
 		}
 
 		eprintln!(
