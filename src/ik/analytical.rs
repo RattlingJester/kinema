@@ -155,10 +155,12 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 	pub fn solve(
 		&self,
 		target: &Isometry3<T>,
-		chain: &mut Chain<6, 7, T>,
+		chain: &Chain<6, 7, T>,
 	) -> ([IkSolution<T>; 8], usize) {
 		let mut solutions: [IkSolution<T>; 8] = core::array::from_fn(|_| IkSolution::default());
 		let mut count = 0;
+
+		let two: T = nalgebra::convert(2.0);
 
 		let r = target.rotation.to_rotation_matrix();
 		let p = target.translation.vector;
@@ -166,19 +168,55 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 		let approach = r.matrix().column(2).into_owned();
 		let wrist_center = p - approach * self.d[5];
 
-		let theta1_a = wrist_center[1].atan2(wrist_center[0]);
+		let wx = wrist_center[0];
+		let wy = wrist_center[1];
+		let wz = wrist_center[2];
+
+		let l1 = self.d[2]; // upper arm length
+		let l2 = self.d[4]; // forearm length
+
+		let theta1_a = wy.atan2(wx);
 		let theta1_b = theta1_a + T::pi();
 
 		for &theta1 in &[theta1_a, theta1_b] {
-			if let Some((theta2, theta3)) =
-				self.solve_arm_profile_with_chain(wrist_center, theta1, chain)
-			{
+			let r_xy = (wx * wx + wy * wy).sqrt() - self.a[1];
+			let z2 = wz - self.d[0];
+
+			let d_sw_sq = r_xy * r_xy + z2 * z2;
+			let cos_theta3 = (d_sw_sq - l1 * l1 - l2 * l2) / (two * l1 * l2);
+
+			eprintln!(
+				"theta1={theta1:.4}, r_xy={r_xy:.4}, z2={z2:.4}, d_sw={:.4}, cos_theta3={cos_theta3:.4}",
+				d_sw_sq.sqrt()
+			);
+
+			if cos_theta3 < nalgebra::convert(-1.0) || cos_theta3 > T::one() {
+				continue;
+			}
+
+			let sin_theta3_pos = (T::one() - cos_theta3 * cos_theta3).sqrt();
+
+			for &sin_theta3 in &[sin_theta3_pos, -sin_theta3_pos] {
+				let theta3 = sin_theta3.atan2(cos_theta3);
+
+				let k1 = l1 + l2 * cos_theta3;
+				let k2 = l2 * sin_theta3;
+				let theta2 = r_xy.atan2(z2) - k2.atan2(k1);
+
 				let r03 = self.r03(theta1, theta2, theta3);
 				let r36 = r03.transpose() * r.matrix();
 
-				let wrist_options = Self::extract_euler_zyz_pairs(&r36);
+				let (theta4, theta5, theta6) = euler_zyz(&r36);
 
-				for (t4, t5, t6) in wrist_options {
+				for &t5 in &[theta5, -theta5] {
+					let (t4, t6) = if t5.abs() < nalgebra::convert(1e-6_f64) {
+						(T::zero(), (-r36[(0, 1)]).atan2(r36[(0, 0)]))
+					} else if t5 == theta5 {
+						(theta4, theta6)
+					} else {
+						(theta4 + T::pi(), theta6 + T::pi())
+					};
+
 					if count < 8 {
 						let mut pose = SVector::<T, 6>::zeros();
 						pose[0] = theta1;
@@ -197,84 +235,8 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 				}
 			}
 		}
+
 		(solutions, count)
-	}
-
-	fn solve_arm_profile_with_chain(
-		&self,
-		target_wc: Vector3<T>,
-		theta1: T,
-		chain: &mut Chain<6, 7, T>,
-	) -> Option<(T, T)> {
-		let mut t2 = T::zero();
-		let mut t3 = T::zero();
-
-		let mut current_pose = SVector::<T, 6>::zeros();
-		current_pose[0] = theta1;
-
-		let wrist_node_idx = 4;
-
-		for _ in 0..15 {
-			current_pose[1] = t2;
-			current_pose[2] = t3;
-
-			chain.set_joint_positions_clamped(current_pose);
-			chain.update_transforms();
-
-			let active_joints = chain.joint_positions();
-			let clamped_t2 = active_joints[1];
-			let clamped_t3 = active_joints[2];
-
-			let current_wc = chain.nodes[wrist_node_idx]
-				.world_transform
-				.translation
-				.vector;
-
-			let error = target_wc - current_wc;
-			if error.norm_squared() < nalgebra::convert(1e-12) {
-				return Some((clamped_t2, clamped_t3));
-			}
-
-			let full_jacobian = chain.jacobian();
-			let j_sub = full_jacobian.fixed_view::<3, 2>(0, 1);
-
-			let j_t = j_sub.transpose();
-			let j_jt = j_t * j_sub;
-
-			if let Some(inv_j_jt) = j_jt.try_inverse() {
-				let delta_theta = inv_j_jt * j_t * error;
-				t2 = clamped_t2 + delta_theta[0];
-				t3 = clamped_t3 + delta_theta[1];
-			} else {
-				return None; // Singularity encountered
-			}
-		}
-
-		current_pose[1] = t2;
-		current_pose[2] = t3;
-		chain.set_joint_positions_clamped(current_pose);
-		chain.update_transforms();
-
-		let final_wc = chain.nodes[wrist_node_idx]
-			.world_transform
-			.translation
-			.vector;
-		let final_joints = chain.joint_positions();
-
-		if (target_wc - final_wc).norm() < nalgebra::convert(1e-4) {
-			Some((final_joints[1], final_joints[2]))
-		} else {
-			None
-		}
-	}
-
-	fn forward_arm_profile(&self, t1: T, t2: T, t3: T) -> (T, T) {
-		let r03 = self.r03(t1, t2, t3);
-		let wx = r03[(0, 3)] + r03[(0, 2)] * self.d[3];
-		let wy = r03[(1, 3)] + r03[(1, 2)] * self.d[3];
-		let wz = r03[(2, 3)] + r03[(2, 2)] * self.d[3];
-
-		((wx * wx + wy * wy).sqrt(), wz)
 	}
 
 	fn r03(&self, t1: T, t2: T, t3: T) -> Matrix3<T> {
@@ -282,29 +244,6 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 		let r2 = Rotation3::from_axis_angle(&Vector3::y_axis(), t2);
 		let r3 = Rotation3::from_axis_angle(&Vector3::y_axis(), t3);
 		(r1 * r2 * r3).into_inner()
-	}
-
-	fn extract_euler_zyz_pairs(r: &Matrix3<T>) -> [(T, T, T); 2] {
-		let zero = T::zero();
-		let pi = T::pi();
-
-		if r[(2, 2)].abs() > nalgebra::convert(0.99999) {
-			let t5 = if r[(2, 2)] > zero { zero } else { pi };
-			let t4 = zero;
-			let t6 = (-r[(0, 1)]).atan2(r[(0, 0)]);
-			return [(t4, t5, t6), (t4, t5, t6)];
-		}
-
-		let t5_a = r[(2, 2)].acos();
-		let t5_b = -t5_a;
-
-		let t4_a = r[(1, 2)].atan2(r[(0, 2)]);
-		let t6_a = r[(2, 1)].atan2(-r[(2, 0)]);
-
-		let t4_b = t4_a + pi;
-		let t6_b = t6_a + pi;
-
-		[(t4_a, t5_a, t6_a), (t4_b, t5_b, t6_b)]
 	}
 
 	fn check_limits<const DOF: usize, const JOINTS: usize>(
@@ -316,5 +255,23 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 			let lim = &node.joint.limits;
 			joints[i] >= lim.min && joints[i] <= lim.max
 		})
+	}
+}
+
+fn euler_zyz<T: RealField + Copy>(r: &Matrix3<T>) -> (T, T, T) {
+	let sy = (r[(0, 2)] * r[(0, 2)] + r[(1, 2)] * r[(1, 2)]).sqrt();
+
+	let singular = sy < nalgebra::convert(1e-6_f64);
+
+	if singular {
+		let a = T::zero();
+		let b = T::zero();
+		let c = (-r[(0, 1)]).atan2(r[(0, 0)]);
+		(a, b, c)
+	} else {
+		let a = r[(1, 2)].atan2(r[(0, 2)]);
+		let b = sy.atan2(r[(2, 2)]);
+		let c = r[(2, 1)].atan2(-r[(2, 0)]);
+		(a, b, c)
 	}
 }
