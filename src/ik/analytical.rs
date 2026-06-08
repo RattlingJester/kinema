@@ -1,4 +1,4 @@
-use nalgebra::{Isometry3, Matrix3, RealField, Rotation3, SVector, Vector3};
+use nalgebra::{Isometry3, Matrix3, RealField, SVector};
 use simba::scalar::SubsetOf;
 
 use crate::{Error, ik::IkSolver, kinematics::Chain};
@@ -165,8 +165,8 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 		let r = target.rotation.to_rotation_matrix();
 		let p = target.translation.vector;
 
-		let approach = r.matrix().column(2).into_owned();
-		let wrist_center = p - approach * self.d[5];
+		let normal = r.matrix().column(0).into_owned();
+		let wrist_center = p - normal * self.a[5];
 
 		let wx = wrist_center[0];
 		let wy = wrist_center[1];
@@ -241,10 +241,23 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 	}
 
 	fn r03(&self, t1: T, t2: T, t3: T) -> Matrix3<T> {
-		let r1 = Rotation3::from_axis_angle(&Vector3::z_axis(), t1);
-		let r2 = Rotation3::from_axis_angle(&Vector3::y_axis(), t2);
-		let r3 = Rotation3::from_axis_angle(&Vector3::y_axis(), t3);
-		(r1 * r2 * r3).into_inner()
+		let dh = |theta: T, alpha: T| -> Matrix3<T> {
+			let (ct, st) = (theta.cos(), theta.sin());
+			let (ca, sa) = (alpha.cos(), alpha.sin());
+			Matrix3::new(
+				ct,
+				-st * ca,
+				st * sa,
+				st,
+				ct * ca,
+				-ct * sa,
+				T::zero(),
+				sa,
+				ca,
+			)
+		};
+
+		dh(t1, self.alpha[0]) * dh(t2, self.alpha[1]) * dh(t3, self.alpha[2])
 	}
 
 	fn check_limits<const DOF: usize, const JOINTS: usize>(
