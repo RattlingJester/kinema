@@ -28,7 +28,7 @@ impl<T: RealField + SubsetOf<f64> + Copy> IkSolver<6, 7, T> for AnalyticalIK<T> 
 	fn solve(&self, chain: &mut Chain<6, 7, T>, target: Isometry3<T>) -> Result<(), Error> {
 		let orig_pos = chain.joint_positions();
 
-		let solution = self.solve_closest(&target, &*chain);
+		let solution = self.solve_closest(&target, chain);
 
 		match solution {
 			Some(pose) => {
@@ -117,7 +117,7 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 	pub fn solve_closest(
 		&self,
 		target: &Isometry3<T>,
-		chain: &Chain<6, 7, T>,
+		chain: &mut Chain<6, 7, T>,
 	) -> Option<SVector<T, 6>> {
 		let current = chain.joint_positions();
 		let (solutions, count) = self.solve(target, chain);
@@ -155,62 +155,27 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 	pub fn solve(
 		&self,
 		target: &Isometry3<T>,
-		chain: &Chain<6, 7, T>,
+		chain: &mut Chain<6, 7, T>,
 	) -> ([IkSolution<T>; 8], usize) {
 		let mut solutions: [IkSolution<T>; 8] = core::array::from_fn(|_| IkSolution::default());
 		let mut count = 0;
-		let two: T = nalgebra::convert(2.0);
 
 		let r = target.rotation.to_rotation_matrix();
 		let p = target.translation.vector;
 
-		// Calculate Wrist Center (WC)
 		let approach = r.matrix().column(2).into_owned();
 		let wrist_center = p - approach * self.d[5];
-		let wx = wrist_center[0];
-		let wy = wrist_center[1];
-		let wz = wrist_center[2];
 
-		// Solve Theta 1 (Two possible base directions)
-		let theta1_a = wy.atan2(wx);
+		let theta1_a = wrist_center[1].atan2(wrist_center[0]);
 		let theta1_b = theta1_a + T::pi();
 
 		for &theta1 in &[theta1_a, theta1_b] {
-			// Project wrist center into the plane of the current theta1 link frame
-			let r_wrist = (wx * wx + wy * wy).sqrt();
-			let r_xy = if (theta1 - theta1_a).abs() < nalgebra::convert(1e-5) {
-				r_wrist - self.a[0]
-			} else {
-				-r_wrist - self.a[0]
-			};
-
-			let z2 = wz - self.d[0];
-			let a2 = self.a[1];
-			let a3 = self.a[2];
-
-			// Solve Theta 3 (Elbow up / Elbow down)
-			let d_sw_sq = r_xy * r_xy + z2 * z2;
-			let cos_theta3 = (d_sw_sq - a2 * a2 - a3 * a3) / (two * a2 * a3);
-
-			if cos_theta3 < nalgebra::convert(-1.0) || cos_theta3 > T::one() {
-				continue; // Target is out of reach for this arm configuration
-			}
-
-			let sin_theta3_pos = (T::one() - cos_theta3 * cos_theta3).sqrt();
-
-			for &sin_theta3 in &[sin_theta3_pos, -sin_theta3_pos] {
-				let theta3 = sin_theta3.atan2(cos_theta3);
-
-				// Solve Theta 2
-				let k1 = a2 + a3 * cos_theta3;
-				let k2 = a3 * sin_theta3;
-				let theta2 = z2.atan2(r_xy) - k2.atan2(k1); // Standard geometric projection
-
-				// Orient the wrist using ZYZ Euler extraction
+			if let Some((theta2, theta3)) =
+				self.solve_arm_profile_with_chain(wrist_center, theta1, chain)
+			{
 				let r03 = self.r03(theta1, theta2, theta3);
 				let r36 = r03.transpose() * r.matrix();
 
-				// Extract the two valid analytical ZYZ configurations for the wrist
 				let wrist_options = Self::extract_euler_zyz_pairs(&r36);
 
 				for (t4, t5, t6) in wrist_options {
@@ -233,6 +198,83 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 			}
 		}
 		(solutions, count)
+	}
+
+	fn solve_arm_profile_with_chain(
+		&self,
+		target_wc: Vector3<T>,
+		theta1: T,
+		chain: &mut Chain<6, 7, T>,
+	) -> Option<(T, T)> {
+		let mut t2 = T::zero();
+		let mut t3 = T::zero();
+
+		let mut current_pose = SVector::<T, 6>::zeros();
+		current_pose[0] = theta1;
+
+		let wrist_node_idx = 4;
+
+		for _ in 0..15 {
+			current_pose[1] = t2;
+			current_pose[2] = t3;
+
+			chain.set_joint_positions_clamped(current_pose);
+			chain.update_transforms();
+
+			let active_joints = chain.joint_positions();
+			let clamped_t2 = active_joints[1];
+			let clamped_t3 = active_joints[2];
+
+			let current_wc = chain.nodes[wrist_node_idx]
+				.world_transform
+				.translation
+				.vector;
+
+			let error = target_wc - current_wc;
+			if error.norm_squared() < nalgebra::convert(1e-12) {
+				return Some((clamped_t2, clamped_t3));
+			}
+
+			let full_jacobian = chain.jacobian();
+			let j_sub = full_jacobian.fixed_view::<3, 2>(0, 1);
+
+			let j_t = j_sub.transpose();
+			let j_jt = j_t * j_sub;
+
+			if let Some(inv_j_jt) = j_jt.try_inverse() {
+				let delta_theta = inv_j_jt * j_t * error;
+				t2 = clamped_t2 + delta_theta[0];
+				t3 = clamped_t3 + delta_theta[1];
+			} else {
+				return None; // Singularity encountered
+			}
+		}
+
+		current_pose[1] = t2;
+		current_pose[2] = t3;
+		chain.set_joint_positions_clamped(current_pose);
+		chain.update_transforms();
+
+		let final_wc = chain.nodes[wrist_node_idx]
+			.world_transform
+			.translation
+			.vector;
+		let final_joints = chain.joint_positions();
+
+		if (target_wc - final_wc).norm() < nalgebra::convert(1e-4) {
+			Some((final_joints[1], final_joints[2]))
+		} else {
+			None
+		}
+	}
+
+	fn forward_arm_profile(&self, t1: T, t2: T, t3: T) -> (T, T) {
+		let r03 = self.r03(t1, t2, t3);
+		let wx = r03[(0, 3)] + r03[(0, 2)] * self.d[3];
+		let wy = r03[(1, 3)] + r03[(1, 2)] * self.d[3];
+		let wz = r03[(2, 3)] + r03[(2, 2)] * self.d[3];
+
+		((wx * wx + wy * wy).sqrt(), wz)
 	}
 
 	fn r03(&self, t1: T, t2: T, t3: T) -> Matrix3<T> {
@@ -274,27 +316,5 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 			let lim = &node.joint.limits;
 			joints[i] >= lim.min && joints[i] <= lim.max
 		})
-	}
-}
-
-/// Extract ZYZ Euler angles from a 3×3 rotation matrix.
-/// R = Rz(a) * Ry(b) * Rz(c)
-fn euler_zyz<T: RealField + Copy>(r: &Matrix3<T>) -> (T, T, T) {
-	let sy = (r[(0, 2)] * r[(0, 2)] + r[(1, 2)] * r[(1, 2)]).sqrt();
-
-	// let singular = sy < nalgebra::convert(1e-6_f64);
-	let singular = sy < T::default_epsilon();
-
-	if singular {
-		// Gimbal lock: b ≈ 0, only a+c is determined
-		let a = T::zero();
-		let b = T::zero();
-		let c = (-r[(0, 1)]).atan2(r[(0, 0)]);
-		(a, b, c)
-	} else {
-		let a = r[(1, 2)].atan2(r[(0, 2)]);
-		let b = sy.atan2(r[(2, 2)]);
-		let c = r[(2, 1)].atan2(-r[(2, 0)]);
-		(a, b, c)
 	}
 }
