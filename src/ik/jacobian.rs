@@ -36,7 +36,7 @@ impl<const D: usize, const J: usize, T: RealField + SubsetOf<f64> + Copy> IkSolv
 				&& rot_diff.norm() < self.allowable_error_angle
 			{
 				let non_checked_positions = chain.joint_positions();
-				chain.set_joint_positions_clamped(non_checked_positions)?;
+				chain.set_joint_positions_clamped(non_checked_positions);
 				chain.update_transforms();
 				return Ok(());
 			}
@@ -183,7 +183,7 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 			}
 		}
 
-		chain.set_joint_positions_clamped(positions_vec)?;
+		chain.set_joint_positions_clamped(positions_vec);
 		chain.update_transforms();
 
 		Ok(calc_pose_diff_with_constraints(
