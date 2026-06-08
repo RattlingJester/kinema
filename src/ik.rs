@@ -3,7 +3,6 @@ use simba::scalar::SubsetOf;
 
 use crate::{Error, kinematics::Chain};
 
-pub mod analytical;
 pub mod jacobian;
 
 pub trait IkSolver<const D: usize, const J: usize, T: RealField + SubsetOf<f64> + Copy> {
