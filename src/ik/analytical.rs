@@ -114,6 +114,23 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 		let current = chain.joint_positions();
 		let (solutions, count) = self.solve(target, chain);
 
+		#[cfg(feature = "debug")]
+		for (i, s) in solutions[..count].iter().enumerate() {
+			eprintln!(
+				"solution {i}: feasible={}, joints={:.4?}",
+				s.feasible,
+				s.joints.as_slice()
+			);
+			for (j, _, node) in chain.iter_movable() {
+				eprintln!(
+					"  joint {j}: value={:.4}, limits=[{:.4}, {:.4}]",
+					nalgebra::try_convert::<T, f64>(s.joints[j]).unwrap(),
+					nalgebra::try_convert::<T, f64>(node.joint.limits.min).unwrap(),
+					nalgebra::try_convert::<T, f64>(node.joint.limits.max).unwrap(),
+				);
+			}
+		}
+
 		solutions[..count]
 			.iter()
 			.filter(|s| s.feasible)
