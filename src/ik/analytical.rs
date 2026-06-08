@@ -83,35 +83,67 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 		Self { d, a, alpha }
 	}
 
-	pub fn from_chain<const DOF: usize, const JOINTS: usize>(
-		chain: &Chain<DOF, JOINTS, T>,
-	) -> Self {
+	pub fn from_chain(chain: &Chain<6, 7, T>) -> Self {
 		let mut d = [T::zero(); 6];
 		let mut a = [T::zero(); 6];
 		let mut alpha = [T::zero(); 6];
 
 		for (i, _, node) in chain.iter_movable() {
-			let origin = &node.joint.origin;
+			let t = &node.joint.origin.translation.vector;
+			let euler = node.joint.origin.rotation.euler_angles();
 
-			// a_i: translation along X of the joint origin
-			a[i] = origin.translation.vector[0];
-			// d_i: translation along Z of the joint origin
-			d[i] = origin.translation.vector[2];
-			// alpha_i: rotation about X (twist angle)
-			let euler = origin.rotation.euler_angles();
-			alpha[i] = euler.0; // roll = rotation about X
+			// In many URDFs the link length is along Z of the parent frame
+			a[i] = t[0]; // X: link length (DH a)
+			d[i] = t[2]; // Z: link offset (DH d)
+			alpha[i] = euler.0; // roll: twist angle
+
+			eprintln!(
+				"joint {i}: origin t=[{:.4},{:.4},{:.4}] rpy=[{:.4},{:.4},{:.4}]",
+				nalgebra::try_convert::<T, f64>(t[0]).unwrap(),
+				nalgebra::try_convert::<T, f64>(t[1]).unwrap(),
+				nalgebra::try_convert::<T, f64>(t[2]).unwrap(),
+				nalgebra::try_convert::<T, f64>(euler.0).unwrap(),
+				nalgebra::try_convert::<T, f64>(euler.1).unwrap(),
+				nalgebra::try_convert::<T, f64>(euler.2).unwrap(),
+			);
 		}
 
-		#[cfg(feature = "debug")]
-		{
-			eprintln!("d:     {:?}", d.map(|v| v));
-			eprintln!("a:     {:?}", a.map(|v| v));
-			eprintln!("alpha: {:?}", alpha.map(|v| v));
-			eprintln!("wrist center from start: ...");
-		}
+		eprintln!("d:     {d:.4?}");
+		eprintln!("a:     {a:.4?}");
+		eprintln!("alpha: {alpha:.4?}");
 
 		Self { d, a, alpha }
 	}
+
+	// pub fn from_chain<const DOF: usize, const JOINTS: usize>(
+	// 	chain: &Chain<DOF, JOINTS, T>,
+	// ) -> Self {
+	// 	let mut d = [T::zero(); 6];
+	// 	let mut a = [T::zero(); 6];
+	// 	let mut alpha = [T::zero(); 6];
+
+	// 	for (i, _, node) in chain.iter_movable() {
+	// 		let origin = &node.joint.origin;
+
+	// 		// a_i: translation along X of the joint origin
+	// 		a[i] = origin.translation.vector[0];
+	// 		// d_i: translation along Z of the joint origin
+	// 		d[i] = origin.translation.vector[2];
+	// 		// alpha_i: rotation about X (twist angle)
+	// 		let euler = origin.rotation.euler_angles();
+	// 		alpha[i] = euler.0; // roll = rotation about X
+	// 	}
+
+	// 	#[cfg(feature = "debug")]
+	// 	{
+	// 		eprintln!("d:     {:?}", d.map(|v| v));
+	// 		eprintln!("a:     {:?}", a.map(|v| v));
+	// 		eprintln!("alpha: {:?}", alpha.map(|v| v));
+	// 		eprintln!("wrist center from start: ...");
+	// 	}
+
+	// 	Self { d, a, alpha }
+	// }
 
 	/// Example solution selection strategy. Selects solution closest to current pose
 	pub fn solve_closest(
