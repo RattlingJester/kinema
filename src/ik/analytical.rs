@@ -21,12 +21,11 @@ const JOINTS: usize = 8;
 #[derive(Debug, Default)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct AnalyticalIK<T: RealField + SubsetOf<f64> + Copy> {
-	/// DH parameter: link offsets
-	pub d:     [T; 6],
-	/// DH parameter: link lengths
-	pub a:     [T; 6],
-	/// DH parameter: twist angles
-	pub alpha: [T; 6],
+	pub d1: T,
+	pub a1: T,
+	pub a2: T,
+	pub a3: T,
+	pub d6: T,
 }
 
 impl<T: RealField + SubsetOf<f64> + Copy> IkSolver<DOF, JOINTS, T> for AnalyticalIK<T> {
@@ -84,36 +83,36 @@ impl<T: RealField + SubsetOf<f64> + Copy> Default for IkSolution<T> {
 }
 
 impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
-	pub fn new(d: [T; 6], a: [T; 6], alpha: [T; 6]) -> Self {
-		Self { d, a, alpha }
+	pub fn new(d1: T, a1: T, a2: T, a3: T, d6: T) -> Self {
+		Self { d1, a1, a2, a3, d6 }
 	}
 
-	pub fn from_chain<const DOF: usize, const JOINTS: usize>(
-		chain: &Chain<DOF, JOINTS, T>,
-	) -> Self {
-		let mut d = [T::zero(); 6];
-		let mut a = [T::zero(); 6];
-		let mut alpha = [T::zero(); 6];
+	// pub fn from_chain<const DOF: usize, const JOINTS: usize>(
+	// 	chain: &Chain<DOF, JOINTS, T>,
+	// ) -> Self {
+	// 	let mut d = [T::zero(); 6];
+	// 	let mut a = [T::zero(); 6];
+	// 	let mut alpha = [T::zero(); 6];
 
-		for (i, _, node) in chain.iter_movable() {
-			let origin = &node.joint.origin;
+	// 	for (i, _, node) in chain.iter_movable() {
+	// 		let origin = &node.joint.origin;
 
-			a[i] = origin.translation.vector.x;
-			d[i] = origin.translation.vector.z;
+	// 		a[i] = origin.translation.vector.x;
+	// 		d[i] = origin.translation.vector.z;
 
-			let (roll, _, _) = origin.rotation.euler_angles();
-			alpha[i] = roll;
-		}
+	// 		let (roll, _, _) = origin.rotation.euler_angles();
+	// 		alpha[i] = roll;
+	// 	}
 
-		#[cfg(feature = "debug")]
-		{
-			eprintln!("d: {d:#?}");
-			eprintln!("a: {a:#?}");
-			eprintln!("alpha: {alpha:#?}");
-		}
+	// 	#[cfg(feature = "debug")]
+	// 	{
+	// 		eprintln!("d: {d:#?}");
+	// 		eprintln!("a: {a:#?}");
+	// 		eprintln!("alpha: {alpha:#?}");
+	// 	}
 
-		Self { d, a, alpha }
-	}
+	// 	Self { d, a, alpha }
+	// }
 
 	/// Example solution selection strategy. Selects solution closest to current pose
 	pub fn solve_closest(
@@ -168,60 +167,42 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 		let p = target.translation.vector;
 
 		let z6 = r.matrix().column(2).into_owned();
-		let wrist_center = p - z6 * self.d[5];
-
+		let wrist_center = p - z6 * self.d6;
 		let wx = wrist_center[0];
 		let wy = wrist_center[1];
 		let wz = wrist_center[2];
-
-		let l1 = self.a[1];
-		let l2 = self.a[2];
 
 		let theta1_a = wy.atan2(wx);
 		let theta1_b = theta1_a + T::pi();
 
 		for &theta1 in &[theta1_a, theta1_b] {
-			let r_xy = (wx * wx + wy * wy).sqrt() - self.a[0];
-			let z2 = wz - self.d[0];
+			let r_xy = wx * theta1.cos() + wy * theta1.sin() - self.a1;
+			let z2 = wz - self.d1;
 
 			let d_sw_sq = r_xy * r_xy + z2 * z2;
-			let cos_theta3 = (d_sw_sq - l1 * l1 - l2 * l2) / (two * l1 * l2);
 
-			#[cfg(feature = "debug")]
-			eprintln!(
-				"theta1={theta1:.4}, r_xy={r_xy:.4}, z2={z2:.4}, d_sw={:.4}, cos_theta3={cos_theta3:.4}",
-				d_sw_sq.sqrt()
-			);
+			let cos_theta3 =
+				(d_sw_sq - self.a2 * self.a2 - self.a3 * self.a3) / (two * self.a2 * self.a3);
 
-			// if cos_theta3 < nalgebra::convert(-1.0) || cos_theta3 > T::one() {
-			// 	continue;
-			// }
-
-			let cos_theta3 = cos_theta3.max(-T::one()).min(T::one());
+			if cos_theta3 < nalgebra::convert(-1.0) || cos_theta3 > T::one() {
+				continue;
+			}
 
 			let sin_theta3_pos = (T::one() - cos_theta3 * cos_theta3).sqrt();
 
 			for &sin_theta3 in &[sin_theta3_pos, -sin_theta3_pos] {
 				let theta3 = sin_theta3.atan2(cos_theta3);
 
-				let k1 = l1 + l2 * cos_theta3;
-				let k2 = l2 * sin_theta3;
-				let theta2 = r_xy.atan2(z2) - k2.atan2(k1);
+				let k1 = self.a2 + self.a3 * cos_theta3;
+				let k2 = self.a3 * sin_theta3;
+				let theta2 = z2.atan2(r_xy) - k2.atan2(k1);
 
-				let r03 = self.r03(theta1, theta2, theta3);
+				let r03 = self.calculate_r03(theta1, theta2, theta3);
 				let r36 = r03.transpose() * r.matrix();
 
-				let (theta4, theta5, theta6) = euler_zyz(&r36);
+				let wrist_options = extract_wrist_yzy(&r36);
 
-				for &t5 in &[theta5, -theta5] {
-					let (t4, t6) = if t5.abs() < T::default_epsilon() {
-						(T::zero(), (-r36[(0, 1)]).atan2(r36[(0, 0)]))
-					} else if t5 == theta5 {
-						(theta4, theta6)
-					} else {
-						(theta4 + T::pi(), theta6 + T::pi())
-					};
-
+				for (t4, t5, t6) in wrist_options {
 					if count < 8 {
 						let mut pose = SVector::<T, 6>::zeros();
 						pose[0] = theta1;
@@ -240,28 +221,54 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 				}
 			}
 		}
-
 		(solutions, count)
 	}
 
-	fn r03(&self, t1: T, t2: T, t3: T) -> Matrix3<T> {
-		let dh = |theta: T, alpha: T| -> Matrix3<T> {
-			let (ct, st) = (theta.cos(), theta.sin());
-			let (ca, sa) = (alpha.cos(), alpha.sin());
-			Matrix3::new(
-				ct,
-				-st * ca,
-				st * sa,
-				st,
-				ct * ca,
-				-ct * sa,
-				T::zero(),
-				sa,
-				ca,
-			)
-		};
+	fn calculate_r03(&self, t1: T, t2: T, t3: T) -> Matrix3<T> {
+		let c1 = t1.cos();
+		let s1 = t1.sin();
+		let c2 = t2.cos();
+		let s2 = t2.sin();
+		let c3 = t3.cos();
+		let s3 = t3.sin();
 
-		dh(t1, self.alpha[0]) * dh(t2, self.alpha[1]) * dh(t3, self.alpha[2])
+		let r01 = Matrix3::new(
+			c1,
+			-s1,
+			T::zero(),
+			s1,
+			c1,
+			T::zero(),
+			T::zero(),
+			T::zero(),
+			T::one(),
+		);
+
+		let r12 = Matrix3::new(
+			c2,
+			-s2,
+			T::zero(),
+			T::zero(),
+			T::zero(),
+			-T::one(),
+			s2,
+			c2,
+			T::zero(),
+		);
+
+		let r23 = Matrix3::new(
+			c3,
+			-s3,
+			T::zero(),
+			s3,
+			c3,
+			T::zero(),
+			T::zero(),
+			T::zero(),
+			T::one(),
+		);
+
+		r01 * r12 * r23
 	}
 
 	fn check_limits<const DOF: usize, const JOINTS: usize>(
@@ -276,20 +283,27 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 	}
 }
 
-fn euler_zyz<T: RealField + Copy>(r: &Matrix3<T>) -> (T, T, T) {
-	let sy = (r[(0, 2)] * r[(0, 2)] + r[(1, 2)] * r[(1, 2)]).sqrt();
+fn extract_wrist_yzy<T: RealField + Copy>(r: &Matrix3<T>) -> [(T, T, T); 2] {
+	let sy = (r[(0, 1)] * r[(0, 1)] + r[(2, 1)] * r[(2, 1)]).sqrt();
 
-	let singular = sy < T::default_epsilon();
-
-	if singular {
-		let a = T::zero();
-		let b = T::zero();
-		let c = (-r[(0, 1)]).atan2(r[(0, 0)]);
-		(a, b, c)
+	if sy < T::default_epsilon() {
+		let t4 = T::zero();
+		let t5 = if r[(1, 1)] > T::zero() {
+			T::zero()
+		} else {
+			T::pi()
+		};
+		let t6 = r[(2, 0)].atan2(r[(0, 0)]);
+		[(t4, t5, t6), (t4, t5, t6)]
 	} else {
-		let a = r[(1, 2)].atan2(r[(0, 2)]);
-		let b = sy.atan2(r[(2, 2)]);
-		let c = r[(2, 1)].atan2(-r[(2, 0)]);
-		(a, b, c)
+		let t4_a = r[(2, 1)].atan2(r[(0, 1)]);
+		let t5_a = sy.atan2(r[(1, 1)]);
+		let t6_a = r[(1, 2)].atan2(-r[(1, 0)]);
+
+		let t4_b = (-r[(2, 1)]).atan2(-r[(0, 1)]);
+		let t5_b = (-sy).atan2(r[(1, 1)]);
+		let t6_b = (-r[(1, 2)]).atan2(r[(1, 0)]);
+
+		[(t4_a, t5_a, t6_a), (t4_b, t5_b, t6_b)]
 	}
 }
