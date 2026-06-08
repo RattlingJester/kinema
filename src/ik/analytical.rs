@@ -89,28 +89,31 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 		let mut alpha = [T::zero(); 6];
 
 		for (i, _, node) in chain.iter_movable() {
-			let t = &node.joint.origin.translation.vector;
-			let euler = node.joint.origin.rotation.euler_angles();
+			let origin = &node.joint.origin;
+			let euler = origin.rotation.euler_angles();
 
-			// In many URDFs the link length is along Z of the parent frame
-			a[i] = t[0]; // X: link length (DH a)
-			d[i] = t[2]; // Z: link offset (DH d)
-			alpha[i] = euler.0; // roll: twist angle
+			alpha[i] = euler.0;
 
-			eprintln!(
-				"joint {i}: origin t=[{:.4},{:.4},{:.4}] rpy=[{:.4},{:.4},{:.4}]",
-				nalgebra::try_convert::<T, f64>(t[0]).unwrap(),
-				nalgebra::try_convert::<T, f64>(t[1]).unwrap(),
-				nalgebra::try_convert::<T, f64>(t[2]).unwrap(),
-				nalgebra::try_convert::<T, f64>(euler.0).unwrap(),
-				nalgebra::try_convert::<T, f64>(euler.1).unwrap(),
-				nalgebra::try_convert::<T, f64>(euler.2).unwrap(),
-			);
+			let r_alpha_inv =
+				nalgebra::Rotation3::from_axis_angle(&nalgebra::Vector3::x_axis(), -euler.0);
+			let t_dh = r_alpha_inv * origin.translation.vector;
+
+			a[i] = t_dh[0];
+			d[i] = t_dh[2];
 		}
 
-		eprintln!("d:     {d:.4?}");
-		eprintln!("a:     {a:.4?}");
-		eprintln!("alpha: {alpha:.4?}");
+		eprintln!(
+			"d:     {:.4?}",
+			d.map(|v| nalgebra::try_convert::<T, f64>(v).unwrap())
+		);
+		eprintln!(
+			"a:     {:.4?}",
+			a.map(|v| nalgebra::try_convert::<T, f64>(v).unwrap())
+		);
+		eprintln!(
+			"alpha: {:.4?}",
+			alpha.map(|v| nalgebra::try_convert::<T, f64>(v).unwrap())
+		);
 
 		Self { d, a, alpha }
 	}
