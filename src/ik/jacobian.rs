@@ -1,15 +1,15 @@
 use nalgebra::{Isometry3, RealField, SMatrix, SVector, Vector3, Vector6};
 use simba::scalar::SubsetOf;
 
-use crate::{Error, ik::IkSolver, kinematics::Chain};
+use crate::{Error, ik::IkSolver, joint::JointLimit, kinematics::Chain};
 
 /// Numerical inverse Jacobian IK solver.
 /// Suitable only for manipulators with DOF <= 6
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct JacobianIK<const JOINTS: usize, T: RealField> {
-	/// Acceptable linear distance error threshold to the target destination in meters
+	/// Acceptable linear distance error threshold to the target destination, in meters
 	pub allowable_error_dist:  T,
-	/// Acceptable angular error threshold to the target destination in radians
+	/// Acceptable angular error threshold to the target destination, in radians
 	pub allowable_error_angle: T,
 	/// Iterative convergence step multiplier
 	pub jacobian_mult:         T,
@@ -19,8 +19,10 @@ pub struct JacobianIK<const JOINTS: usize, T: RealField> {
 	pub eps_factor:            T,
 	/// Maximum damping factor applied at the center of a kinematic singularity.
 	pub lambda_max:            T,
-	/// Maximum joint displacement allowed per singular iteration step in radians.
+	/// Maximum joint displacement allowed per singular iteration step, in radians.
 	pub max_joint_step:        T,
+	/// The proximity boundary near hard limits where joint deceleration activates, in radians
+	pub limit_buffer_zone:     T,
 }
 
 impl<const D: usize, const J: usize, T: RealField + SubsetOf<f64> + Copy> IkSolver<D, J, T>
@@ -30,8 +32,10 @@ impl<const D: usize, const J: usize, T: RealField + SubsetOf<f64> + Copy> IkSolv
 		let orig_positions = chain.joint_positions();
 		let mut last_target_distance = None;
 
+		let limits = chain.joint_limits();
+
 		for _ in 0..self.max_try {
-			let target_diff = self.iteration(chain, target)?;
+			let target_diff = self.iteration(chain, &limits, target)?;
 
 			let mut target_diff_6 = Vector6::<T>::zeros();
 			let c_max = if J < 6 { J } else { 6 };
@@ -73,6 +77,7 @@ impl<const J: usize, T: RealField + SubsetOf<f64> + Copy> Default for JacobianIK
 			nalgebra::convert(100.0),
 			nalgebra::convert(0.15),
 			nalgebra::convert(0.5),
+			nalgebra::convert(0.087),
 		)
 	}
 }
@@ -86,6 +91,7 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 		eps_factor: T,
 		lambda_max: T,
 		max_joint_step: T,
+		limit_buffer_zone: T,
 	) -> Self {
 		Self {
 			allowable_error_dist,
@@ -95,22 +101,47 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 			eps_factor,
 			lambda_max,
 			max_joint_step,
+			limit_buffer_zone,
 		}
 	}
 
 	fn iteration<const DOF: usize>(
 		&self,
 		chain: &mut Chain<DOF, JOINTS, T>,
+		limits: &[JointLimit<T>],
 		target: Isometry3<T>,
 	) -> Result<SVector<T, DOF>, Error> {
 		let orig_positions = chain.joint_positions();
 		let err = calc_pose_diff(&target, &chain.end_transform());
 		let jacobi = chain.jacobian();
-		let mut jacobi_6x6 = SMatrix::<T, 6, 6>::zeros();
 
+		let mut winv_sqrt = SVector::<T, 6>::from_element(T::one());
+
+		for i in 0..DOF {
+			let q = orig_positions[i];
+			let min_q = limits[i].min;
+			let max_q = limits[i].max;
+
+			let dist_min = q - min_q;
+			let dist_max = max_q - q;
+			let min_dist = if dist_min < dist_max {
+				dist_min
+			} else {
+				dist_max
+			};
+
+			if min_dist < self.limit_buffer_zone && min_dist > T::zero() {
+				let ratio = min_dist / self.limit_buffer_zone;
+				winv_sqrt[i] = ratio * ratio;
+			} else if min_dist <= T::zero() {
+				winv_sqrt[i] = T::default_epsilon();
+			}
+		}
+
+		let mut jacobi_6x6 = SMatrix::<T, 6, 6>::zeros();
 		for r in 0..DOF {
 			for c in 0..DOF {
-				jacobi_6x6[(r, c)] = jacobi[(r, c)];
+				jacobi_6x6[(r, c)] = jacobi[(r, c)] * winv_sqrt[c];
 			}
 		}
 
@@ -122,7 +153,7 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 		let eps_machine = T::default_epsilon();
 		let tolerance = eps_machine * self.eps_factor;
 
-		let mut s_pinv = SMatrix::zeros();
+		let mut s_pinv = SMatrix::<T, 6, 6>::zeros();
 		for i in 0..6 {
 			let sigma = singular_values[i];
 			let lambda_sq = if sigma < tolerance {
@@ -140,11 +171,11 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 		}
 
 		let jacobi_pinv_6x6 = v_t.transpose() * s_pinv * u.transpose();
-		let d_q_6 = &jacobi_pinv_6x6 * &err;
+		let d_q_weighted_6 = &jacobi_pinv_6x6 * &err;
 
 		let mut d_q = SVector::<T, JOINTS>::zeros();
 		for i in 0..DOF {
-			d_q[i] = d_q_6[i];
+			d_q[i] = d_q_weighted_6[i] * winv_sqrt[i];
 		}
 
 		let mut positions_vec = SVector::<T, DOF>::zeros();

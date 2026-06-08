@@ -3,8 +3,8 @@ use nalgebra::{Isometry3, RealField, Translation3, Unit, UnitQuaternion, Vector3
 #[cfg(not(feature = "std"))]
 use crate::MAX_NAME_LEN;
 
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct JointLimit<T: RealField> {
 	/// Radians
 	pub min:      T,
