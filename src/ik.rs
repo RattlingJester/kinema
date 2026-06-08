@@ -48,9 +48,9 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 		op_space: [bool; 6],
 		ignored_joints: &[usize],
 	) -> Result<SVector<T, DOF>, Error> {
-		// let required_dof = op_space.iter().filter(|x| **x).count();
+		let required_dof = op_space.iter().filter(|x| **x).count();
 		let orig_positions = chain.joint_positions();
-		// let available_dof = DOF - ignored_joints.len();
+		let available_dof = DOF - ignored_joints.len();
 
 		let t_n = chain.end_transform();
 		let err_full = calc_pose_diff_with_constraints::<DOF, T>(&target, &t_n, op_space);
@@ -79,57 +79,57 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 
 		let mut d_q = SVector::<T, DOF>::zeros();
 
-		// if available_dof > required_dof {
-		// Redundant system: Solve via Damped Least Squares (DLS) Pseudo-Inverse
-		// Formula: J_pinv = J^T * (J * J^T + lambda^2 * I)^-1
-		let eps: T = nalgebra::convert(0.0001);
-		let lambda_sq = eps * eps;
+		if available_dof > required_dof {
+			// Redundant system: Solve via Damped Least Squares (DLS) Pseudo-Inverse
+			// Formula: J_pinv = J^T * (J * J^T + lambda^2 * I)^-1
+			let eps: T = nalgebra::convert(0.0001);
+			let lambda_sq = eps * eps;
 
-		let mut jj_t = jacobi * jacobi.transpose();
+			let mut jj_t = jacobi * jacobi.transpose();
 
-		for i in 0..6 {
-			if op_space[i] {
-				jj_t[(i, i)] += lambda_sq;
-			} else {
-				jj_t[(i, i)] = T::one();
-			}
-		}
-
-		let jj_t_inv = jj_t.try_inverse().ok_or(Error::MathError)?;
-		let jacobi_pinv = jacobi.transpose() * jj_t_inv;
-
-		match self.nullpace_fn {
-			Some(ref f) => {
-				let subtask_full = f(orig_positions.as_slice());
-				let mut subtask = SVector::<T, DOF>::zeros();
-				for src_c in 0..DOF {
-					if !ignored_joints.contains(&src_c) {
-						subtask[src_c] = subtask_full[src_c];
-					}
+			for i in 0..6 {
+				if op_space[i] {
+					jj_t[(i, i)] += lambda_sq;
+				} else {
+					jj_t[(i, i)] = T::one();
 				}
-
-				let identity = SMatrix::<T, DOF, DOF>::identity();
-				d_q = jacobi_pinv * err + (identity - jacobi_pinv * jacobi) * subtask;
 			}
-			None => {
-				d_q = jacobi_pinv * err;
+
+			let jj_t_inv = jj_t.try_inverse().ok_or(Error::MathError)?;
+			let jacobi_pinv = jacobi.transpose() * jj_t_inv;
+
+			match self.nullpace_fn {
+				Some(ref f) => {
+					let subtask_full = f(orig_positions.as_slice());
+					let mut subtask = SVector::<T, DOF>::zeros();
+					for src_c in 0..DOF {
+						if !ignored_joints.contains(&src_c) {
+							subtask[src_c] = subtask_full[src_c];
+						}
+					}
+
+					let identity = SMatrix::<T, DOF, DOF>::identity();
+					d_q = jacobi_pinv * err + (identity - jacobi_pinv * jacobi) * subtask;
+				}
+				None => {
+					d_q = jacobi_pinv * err;
+				}
 			}
-		}
-		// } else {
-		// Square or Over-constrained system: Solve via Normal Equations
-		// Formula: (J^T * J)^-1 * J^T * err
-		// j_t_j: DOF x DOF matrix
-		// 	let mut j_t_j = jacobi.transpose() * jacobi;
+		} else {
+			// Square or Over-constrained system: Solve via Normal Equations
+			// Formula: (J^T * J)^-1 * J^T * err
+			// j_t_j: DOF x DOF matrix
+			let mut j_t_j = jacobi.transpose() * jacobi;
 
-		// 	for i in 0..DOF {
-		// 		if ignored_joints.contains(&i) {
-		// 			j_t_j[(i, i)] = T::one();
-		// 		}
-		// 	}
+			for i in 0..DOF {
+				if ignored_joints.contains(&i) {
+					j_t_j[(i, i)] = T::one();
+				}
+			}
 
-		// 	let j_t_j_inv = j_t_j.try_inverse().ok_or(Error::MathError)?;
-		// 	d_q = j_t_j_inv * jacobi.transpose() * err;
-		// };
+			let j_t_j_inv = j_t_j.try_inverse().ok_or(Error::MathError)?;
+			d_q = j_t_j_inv * jacobi.transpose() * err;
+		};
 
 		let mut positions_vec = SVector::<T, DOF>::zeros();
 		for i in 0..DOF {
