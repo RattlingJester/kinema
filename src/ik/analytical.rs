@@ -185,6 +185,7 @@ impl<T: RealField + SubsetOf<f64> + Copy> AnalyticalIK<T> {
 			let d_sw_sq = r_xy * r_xy + z2 * z2;
 			let cos_theta3 = (d_sw_sq - l1 * l1 - l2 * l2) / (two * l1 * l2);
 
+			#[cfg(feature = "debug")]
 			eprintln!(
 				"theta1={theta1:.4}, r_xy={r_xy:.4}, z2={z2:.4}, d_sw={:.4}, cos_theta3={cos_theta3:.4}",
 				d_sw_sq.sqrt()
