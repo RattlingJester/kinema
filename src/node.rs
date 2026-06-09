@@ -21,7 +21,7 @@ pub struct Node<T: RealField + SubsetOf<f64>> {
 #[cfg(feature = "visuals")]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug)]
-pub struct Link<T: RealField + simba::scalar::SubsetOf<f64>> {
+pub struct Link<T: RealField + SubsetOf<f64>> {
 	pub name:    String,
 	pub visuals: Vec<Visual<T>>,
 }

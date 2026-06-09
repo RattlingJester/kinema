@@ -24,7 +24,7 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64>> Chain<
 	#[cfg(feature = "urdf")]
 	pub fn from_urdf<P: AsRef<std::path::Path>>(path: &P) -> Result<Self, Error>
 	where
-		Chain<DOF, JOINTS, T>: TryFrom<urdf_rs::Robot, Error = crate::Error>,
+		Chain<DOF, JOINTS, T>: TryFrom<urdf_rs::Robot, Error = Error>,
 	{
 		let robot = urdf_rs::utils::read_urdf_or_xacro(path)?;
 
@@ -141,7 +141,7 @@ impl<const DOF: usize, const JOINTS: usize, T> TryFrom<urdf_rs::Robot> for Chain
 where
 	T: RealField + SubsetOf<f64> + Copy,
 {
-	type Error = crate::Error;
+	type Error = Error;
 
 	fn try_from(robot: urdf_rs::Robot) -> Result<Self, Self::Error> {
 		use std::collections::HashMap;

@@ -13,12 +13,12 @@ pub struct CartTrap<
 	T: RealField + SubsetOf<f64>,
 > {
 	/// rad   — starting position
-	pub start: Isometry3<T>,
+	pub start:    Isometry3<T>,
 	/// rad   — target position
-	pub end:   Isometry3<T>,
+	pub end:      Isometry3<T>,
 	/// [rad; DOF] - interpolated joint positions for the trajectory
-	pub path:  [SVector<T, DOF>; PATH_LEN],
-
+	pub path:     [SVector<T, DOF>; PATH_LEN],
+	/// sec - Duration of the trajectory
 	pub duration: T,
 }
 
@@ -46,7 +46,6 @@ impl<
 	T: RealField + SubsetOf<f64> + Copy,
 > CartTrap<PATH_LEN, DOF, JOINTS, T>
 {
-	#[allow(clippy::too_many_arguments)]
 	pub fn compute(
 		chain: &mut Chain<DOF, JOINTS, T>,
 		start: Isometry3<T>,

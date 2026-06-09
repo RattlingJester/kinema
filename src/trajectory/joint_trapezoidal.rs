@@ -120,6 +120,7 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
 		p
 	}
 
+	/// Sample the trajectory at a time t
 	pub fn sample(&self, t: T) -> SVector<T, DOF> {
 		let half = T::from_subset(&0.5_f64);
 		let two = T::from_subset(&2.0_f64);

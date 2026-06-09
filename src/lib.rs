@@ -14,9 +14,9 @@ pub(crate) const MAX_NAME_LEN: usize = 32;
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+/// General error type
 pub enum Error {
-	// #[error("Mismatch")]
-	// SizeMismatch { provided: usize, expected: usize },
 	#[error("Node count mismatch, got: {got}")]
 	NodeCountMismatch { got: usize },
 	#[error("Movable count mismatch, got: {got}")]

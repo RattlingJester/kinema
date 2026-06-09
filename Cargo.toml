@@ -1,6 +1,6 @@
 [package]
 name = "kinema"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 description = "no_std robot kinematics library for bare-metal embedded systems."
 readme = "README.md"
@@ -25,3 +25,16 @@ defmt = ["dep:defmt", "heapless/defmt", "nalgebra/defmt"]
 urdf = ["dep:urdf-rs", "visuals"]
 visuals = ["std"]
 debug = ["std"]
+
+[lints.rust]
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+cardinal_motions = "warn"
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+panic_in_result_fn = "warn"
+exhaustive_enums = "warn"
+
+todo = "warn"
+dbg_macro = "warn"
