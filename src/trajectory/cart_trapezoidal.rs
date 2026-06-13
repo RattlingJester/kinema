@@ -13,13 +13,15 @@ pub struct CartTrap<
 	T: RealField + SubsetOf<f64>,
 > {
 	/// rad   — starting position
-	pub start:    Isometry3<T>,
+	pub start:         Isometry3<T>,
 	/// rad   — target position
-	pub end:      Isometry3<T>,
+	pub end:           Isometry3<T>,
 	/// [rad; DOF] - interpolated joint positions for the trajectory
-	pub path:     [SVector<T, DOF>; PATH_LEN],
+	pub path:          [SVector<T, DOF>; PATH_LEN],
+	/// Duration of each segment in seconds, PATH_LEN-1 entries
+	pub segment_times: [T; PATH_LEN],
 	/// sec - Duration of the trajectory
-	pub duration: T,
+	pub duration:      T,
 }
 
 impl<
@@ -31,10 +33,11 @@ impl<
 {
 	fn default() -> Self {
 		Self {
-			start:    Isometry3::identity(),
-			end:      Isometry3::identity(),
-			path:     [SVector::zeros(); PATH_LEN],
-			duration: T::zero(),
+			start:         Isometry3::identity(),
+			end:           Isometry3::identity(),
+			path:          [SVector::zeros(); PATH_LEN],
+			segment_times: [T::zero(); PATH_LEN],
+			duration:      T::zero(),
 		}
 	}
 }
@@ -80,8 +83,9 @@ impl<
 		}
 
 		let mut duration = T::zero();
+		let mut segment_times = [T::zero(); PATH_LEN];
 
-		for segment in path.windows(2) {
+		for (i, segment) in path.windows(2).enumerate() {
 			let q0 = &segment[0];
 			let q1 = &segment[1];
 
@@ -95,6 +99,7 @@ impl<
 				seg_time = seg_time.max(t);
 			}
 
+			segment_times[i] = seg_time;
 			duration += seg_time;
 		}
 
@@ -102,6 +107,7 @@ impl<
 			start,
 			end,
 			path,
+			segment_times,
 			duration,
 		})
 	}
