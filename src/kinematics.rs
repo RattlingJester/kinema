@@ -251,8 +251,8 @@ where
 					joint_type,
 					pos: T::zero(),
 					limits: JointLimit {
-						min:      nalgebra::convert(j.limit.lower),
-						max:      nalgebra::convert(j.limit.upper),
+						min:      nalgebra::convert(j.limit.lower.to_degrees()),
+						max:      nalgebra::convert(j.limit.upper.to_degrees()),
 						velocity: nalgebra::convert(j.limit.velocity),
 						effort:   nalgebra::convert(j.limit.effort),
 					},
