@@ -7,7 +7,9 @@ pub mod node;
 pub mod trajectory;
 pub mod visual;
 
-pub use nalgebra::{Isometry3, SMatrix, SVector, Translation3, Unit, UnitQuaternion, Vector3};
+pub use nalgebra::{
+	Isometry3, SMatrix, SVector, Translation3, Unit, UnitQuaternion, Vector3, distance,
+};
 
 #[cfg(not(feature = "std"))]
 pub(crate) const MAX_NAME_LEN: usize = 32;
