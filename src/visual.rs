@@ -52,16 +52,11 @@ impl<T: RealField + SubsetOf<f64>> Visual<T> {
 			use nalgebra::convert;
 			convert(x)
 		};
-		let k: T = conv(1000.0);
 
 		let t = v.origin.xyz;
 		let rpy = v.origin.rpy;
 		let origin = Isometry3::from_parts(
-			Translation3::new(
-				conv(t[0]) * k.clone(),
-				conv(t[1]) * k.clone(),
-				conv(t[2]) * k.clone(),
-			),
+			Translation3::new(conv(t[0]), conv(t[1]), conv(t[2])),
 			UnitQuaternion::from_euler_angles(conv(rpy[0]), conv(rpy[1]), conv(rpy[2])),
 		);
 
@@ -75,16 +70,16 @@ impl<T: RealField + SubsetOf<f64>> Visual<T> {
 				},
 			},
 			UG::Cylinder { radius, length } => Geometry::Cylinder {
-				radius: conv(*radius) * k.clone(),
-				length: conv(*length) * k.clone(),
+				radius: conv(*radius),
+				length: conv(*length),
 			},
 			UG::Sphere { radius } => Geometry::Sphere {
-				radius: conv(*radius) * k.clone(),
+				radius: conv(*radius),
 			},
 			UG::Box { size } => Geometry::Box {
-				depth:  conv(size[0]) * k.clone(),
-				width:  conv(size[1]) * k.clone(),
-				height: conv(size[2]) * k,
+				depth:  conv(size[0]),
+				width:  conv(size[1]),
+				height: conv(size[2]),
 			},
 			other => panic!(
 				"Unsupported geometry type: {}",
