@@ -12,10 +12,6 @@ pub struct CartTrap<
 	const JOINTS: usize,
 	T: RealField + SubsetOf<f64>,
 > {
-	/// rad   — starting position
-	pub start:         Isometry3<T>,
-	/// rad   — target position
-	pub end:           Isometry3<T>,
 	/// [rad; DOF] - interpolated joint positions for the trajectory
 	pub path:          [SVector<T, DOF>; PATH_LEN],
 	/// Duration of each segment in seconds, PATH_LEN-1 entries
@@ -33,8 +29,6 @@ impl<
 {
 	fn default() -> Self {
 		Self {
-			start:         Isometry3::identity(),
-			end:           Isometry3::identity(),
 			path:          [SVector::zeros(); PATH_LEN],
 			segment_times: [T::zero(); PATH_LEN],
 			duration:      T::zero(),
@@ -104,8 +98,6 @@ impl<
 		}
 
 		Ok(Self {
-			start,
-			end,
 			path,
 			segment_times,
 			duration,
