@@ -91,22 +91,14 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
 		let t_total_max = local_duration
 			.iter()
 			.fold(T::zero(), |max_t, &t| max_t.max(t));
-		// let t_ramp_max = local_t_ramp
-		// 	.iter()
-		// 	.fold(T::zero(), |max_t, &t| max_t.max(t));
-		// let t_cruise_max = t_total_max - (t_ramp_max * two);
+		let t_ramp_max = local_t_ramp
+			.iter()
+			.fold(T::zero(), |max_t, &t| max_t.max(t));
+		let t_cruise_max = t_total_max - (t_ramp_max * two);
 
 		if t_total_max.is_zero() {
 			return p;
 		}
-
-		let lead_idx = local_duration
-			.iter()
-			.position(|&t| t == t_total_max)
-			.unwrap_or(0);
-
-		let t_ramp_max = local_t_ramp[lead_idx];
-		let t_cruise_max = t_total_max - (t_ramp_max * two);
 
 		for (idx, _id, _node) in chain.iter_movable() {
 			p.t_ramp = t_ramp_max;
