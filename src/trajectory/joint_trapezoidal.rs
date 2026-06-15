@@ -122,8 +122,8 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
 
 	/// Sample the trajectory at a time t
 	pub fn sample(&self, t: T) -> SVector<T, DOF> {
-		let half = T::from_subset(&0.5_f64);
-		let two = T::from_subset(&2.0_f64);
+		let half: T = nalgebra::convert(0.5);
+		let two: T = nalgebra::convert(2.0);
 
 		let t_ramp = self.t_ramp;
 		let t_cruise = self.t_cruise;
@@ -134,7 +134,9 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
 		let p0 = &self.start;
 		let v_coast = &self.v_coast;
 
-		let s: T = if t <= t_ramp {
+		let s: T = if t_ramp == T::zero() {
+			t
+		} else if t <= t_ramp {
 			half * t * t / t_ramp
 		} else if t <= t_ramp + t_cruise {
 			let tau = t - t_ramp;
@@ -158,9 +160,6 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
 		let start = self.joint_positions();
 
 		let profile = JointTrap::compute(self, start, goal, speed, acc);
-
-		// let dur_secs = profile.t_ramp * nalgebra::convert(2.0) + profile.t_cruise;
-		// let duration = Duration::from_secs_f64(nalgebra::convert(dur_secs));
 
 		profile
 	}
