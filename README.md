@@ -3,76 +3,105 @@
 A `no_std` robot kinematics library for bare-metal embedded systems, built on
 [nalgebra](https://nalgebra.org) and largely ispired by [k](https://crates.io/crates/k) crate from openrr collection.
 
-Provides forward kinematics and geometric Jacobian computation for serial-chain robot arms with a fully static memory layout. 
-
-## TODO
- - Inverse kinematics
+Provides forward kinematics and Jacobian inverse kinematics for serial-chain robot arms.
 
 ## Building a chain
-Not very convenient for now, may improve later.
+
+### NO-STD:
+
+Building it like that is kinda tedious, maybe I'll improve the API later.
 
 ```rust
-use core::f32::consts::FRAC_PI_2;
-use nalgebra::{Isometry3, Translation3, Unit, UnitQuaternion, Vector3};
-use kinema::{Chain, Joint, JointLimit, JointType, Node, NodeIDx};
+pub fn my_robot() -> Chain<2, 4, f32> {
+   	let iso = |x, y, z, roll, pitch, yaw| {
+  		Isometry3::from_parts(
+ 			Translation3::new(x, y, z),
+ 			UnitQuaternion::from_euler_angles(roll, pitch, yaw),
+  		)
+   	};
 
-pub fn my_robot() -> Chain<6, 7, f32> {
-    let iso = |x, y, z, roll, pitch, yaw| {
-        Isometry3::from_parts(
-            Translation3::new(x, y, z),
-            UnitQuaternion::from_euler_angles(roll, pitch, yaw),
-        )
-    };
-    let z = || JointType::Revolute { axis: Unit::new_normalize(Vector3::z()) };
-    let id = Isometry3::identity;
+   	let revolute_z = || JointType::Revolute {
+  		axis: Unit::new_normalize(Vector3::z()),
+   	};
 
-    let base = Node {
-        parent: None,
-        joint: Joint {
-            name: "base", joint_type: JointType::Fixed, pos: 0.0,
-            limits: JointLimit { min: 0.0, max: 0.0, effort: 0.0, velocity: 0.0 },
-            origin: id(),
-        },
-        world_transform: id(),
-    };
+   	let deg_lim = |lo: f32, hi: f32, effort: f32, velocity: f32| JointLimit {
+  		min: lo.to_radians(),
+  		max: hi.to_radians(),
+  		effort,
+  		velocity,
+   	};
 
-    let j1 = Node {
-        parent: Some(NodeIDx(0)),
-        joint: Joint {
-            name: "joint_1", joint_type: z(), pos: 0.0,
-            limits: JointLimit { min: -3.14, max: 3.14, effort: 30.0, velocity: 31.41 },
-            origin: iso(0.0, 0.0, 0.212, 0.0, 0.0, 0.0),
-        },
-        world_transform: id(),
-    };
+   	// 0 · base_link — root, fixed
+   	let base = Node {
+  		parent:     None,
+  		joint:      Joint {
+     			name:       "base_link".try_into().unwrap(),
+     			joint_type: JointType::Fixed,
+     			pos:        0.0,
+     			limits:     JointLimit::default(),
+     			origin:     Isometry3::identity(),
+  		},
+  		world_transform: Isometry3::identity(),
+   	};
+
+   	// 1 · joint_1 → link_1  (parent: 0)
+   	//   origin xyz="0 0 0" rpy="0 0 0"
+   	let j1 = Node {
+  		parent:     Some(0),
+  		joint:      Joint {
+     			name:       "joint_1".try_into().unwrap(),
+     			joint_type: revolute_z(),
+     			pos:        0.0,
+     			limits:     deg_lim(-180.0, 180.0, 30.0, 31.41),
+     			origin:     Isometry3::identity(),
+  		},
+  		world_transform: Isometry3::identity(),
+   	};
+
+   	// 2 · joint_2 → link_2  (parent: 1)
+   	//   origin xyz="0.071 0 0.292" rpy="π/2 0 0"
+   	let j2 = Node {
+       	parent:     Some(1),
+      	joint:      Joint {
+      		name:       "joint_2".try_into().unwrap(),
+      		joint_type: revolute_z(),
+      		pos:        0.0,
+      		limits:     deg_lim(-145.0, 90.0, 25.0, TAU),
+      		origin:     iso(0.071, 0.0, 0.292, FRAC_PI_2, 0.0, 0.0),
+  		},
+  		world_transform: Isometry3::identity(),
+   	};
 
     // ... repeat for remaining joints ...
 
+    let tool = Node {
+        parent:     Some(2),
+        joint:      Joint {
+           	name:       "tool_fixed".try_into().unwrap(),
+           	joint_type: JointType::Fixed,
+           	pos:        0.0,
+           	limits:     JointLimit::default(),
+           	origin:     iso(0.0, 0.0, 0.059, 0.0, 0.0, 0.0),
+        },
+        world_transform: Isometry3::identity(),
+    };
+
     Chain::new(
-        [base, j1, /* j2, j3, j4, j5, j6 */],
-        core::array::from_fn(|i| NodeIDx(i + 1)),
+        [base, j1, j2, tool],
+        core::array::from_fn(|i| i + 1), // movable = nodes 1-3
     )
 }
 ```
 
-## Usage
-
-```rust
-static CHAIN: StaticCell<Chain<6, 7, f32>> = StaticCell::new();
-
-let chain =  CHAIN.init(my_robot());
-
-// Set joint angles (radians)
-let q = &[0.1, -0.5, 0.3, 0.0, 0.8, -0.2];
-chain.set_joint_positions(q).unwrap();
-
-// Forward kinematics
-chain.update_transforms();
-let end_effector: Isometry3<f32> = chain.end_transform();
-```
-
-## Node ordering requirement
+#### Node ordering requirement
 
 Nodes **must** be added in topological order (every parent before its
 children). `update_transforms` relies on this to compute world poses in a
 single forward pass without recursion.
+
+### Load from URDF:
+
+URDF parsing requires standard library and enabled "urdf" feature
+```rust
+let mut chain = Chain::from_urdf("robot.urdf").unwrap();
+```
