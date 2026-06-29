@@ -24,7 +24,6 @@ std = []
 defmt = ["dep:defmt", "heapless/defmt", "nalgebra/defmt"]
 urdf = ["dep:urdf-rs", "visuals"]
 visuals = ["std"]
-debug = ["std"]
 
 [lints.rust]
 unreachable_pub = "warn"
