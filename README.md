@@ -1,9 +1,19 @@
 # kinema
 
 A `no_std` robot kinematics library for bare-metal embedded systems, built on
-[nalgebra](https://nalgebra.org) and largely ispired by [k](https://crates.io/crates/k) crate from openrr collection.
+[nalgebra](https://nalgebra.org) and largely ispired by [k](https://crates.io/crates/k) crate from openrr collection. I am aiming to reduce number of dependencies (compared to `k`) and make the whole library `no_std` compatible.
+
+The library is early in developlent, so many features are not documented and the API is not particularly convenient. I am using this library in my robotics projects, running both on PC and embedded devices.
 
 Provides forward kinematics and Jacobian inverse kinematics for serial-chain robot arms.
+
+# TODO
+
+* Try to implement URDF parsing in `no_std` environment and get rid of urdf-rs dependency;
+
+* Get rid of `heapless` dependecy;
+
+* Write proper docs and provide examples;
 
 ## Building a chain
 
@@ -31,7 +41,7 @@ pub fn my_robot() -> Chain<2, 4, f32> {
   		velocity,
    	};
 
-   	// 0 · base_link — root, fixed
+   	// 0. base_link — root, fixed
    	let base = Node {
   		parent:     None,
   		joint:      Joint {
@@ -44,7 +54,7 @@ pub fn my_robot() -> Chain<2, 4, f32> {
   		world_transform: Isometry3::identity(),
    	};
 
-   	// 1 · joint_1 → link_1  (parent: 0)
+   	// 1. joint_1 -> link_1  (parent: 0)
    	//   origin xyz="0 0 0" rpy="0 0 0"
    	let j1 = Node {
   		parent:     Some(0),
@@ -58,8 +68,8 @@ pub fn my_robot() -> Chain<2, 4, f32> {
   		world_transform: Isometry3::identity(),
    	};
 
-   	// 2 · joint_2 → link_2  (parent: 1)
-   	//   origin xyz="0.071 0 0.292" rpy="π/2 0 0"
+   	// 2. joint_2 → link_2  (parent: 1)
+   	//   origin xyz="0.071 0 0.292" rpy="PI/2 0 0"
    	let j2 = Node {
        	parent:     Some(1),
       	joint:      Joint {
@@ -88,7 +98,7 @@ pub fn my_robot() -> Chain<2, 4, f32> {
 
     Chain::new(
         [base, j1, j2, tool],
-        core::array::from_fn(|i| i + 1), // movable = nodes 1-3
+        [1, 2], // movable = nodes 1, 2
     )
 }
 ```
