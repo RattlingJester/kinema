@@ -9,7 +9,7 @@ pub mod trajectory;
 pub mod visual;
 
 pub use nalgebra::{
-	Isometry3, SMatrix, SVector, Translation3, Unit, UnitQuaternion, Vector3, distance,
+	Isometry3, Quaternion, SMatrix, SVector, Translation3, Unit, UnitQuaternion, Vector3, distance,
 };
 
 #[cfg(feature = "macro")]
