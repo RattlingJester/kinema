@@ -25,6 +25,10 @@ defmt = ["dep:defmt", "heapless/defmt", "nalgebra/defmt"]
 urdf = ["dep:urdf-rs", "visuals"]
 visuals = ["std"]
 
+[[example]]
+name = "no_std"
+required-features = []
+
 [lints.rust]
 unreachable_pub = "warn"
 unused_qualifications = "warn"
