@@ -159,8 +159,6 @@ impl<const DOF: usize, const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy>
 	pub fn jplan_trap(&self, goal: SVector<T, DOF>, speed: T, acc: T) -> JointTrap<DOF, JOINTS, T> {
 		let start = self.joint_positions();
 
-		let profile = JointTrap::compute(self, start, goal, speed, acc);
-
-		profile
+		JointTrap::compute(self, start, goal, speed, acc)
 	}
 }

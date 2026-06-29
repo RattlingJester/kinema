@@ -1,43 +1,7 @@
-[package]
-name = "kinema"
-version = "0.3.0"
-edition = "2024"
-description = "no_std robot kinematics library for bare-metal embedded systems."
-readme = "README.md"
-license = "AGPL-3.0"
-repository = "https://github.com/RattlingJester/kinema.git"
-keywords = ["kinematics", "embedded"]
+[workspace]
+resolver = "3"
+members = ["kinema", "kinema-macro"]
+default-members = ["kinema"]
 
-[dependencies]
-defmt = { version = "1.0.1", optional = true }
-urdf-rs = { version = "0.9.0", optional = true }
-
-heapless = { version = "0.9.3"}
-nalgebra = { version = "0.34.2", default-features = false, features = ["libm"] }
-simba = { version = "0.9.1", default-features = false, features = ["libm"] }
-
-thiserror = { version = "2.0.17", default-features = false }
-
-[features]
-default = []
-std = []
-defmt = ["dep:defmt", "heapless/defmt", "nalgebra/defmt"]
-urdf = ["dep:urdf-rs", "visuals"]
-visuals = ["std"]
-
-[[example]]
-name = "no_std"
-required-features = []
-
-[lints.rust]
-unreachable_pub = "warn"
-unused_qualifications = "warn"
-
-cardinal_motions = "warn"
-missing_errors_doc = "warn"
-missing_panics_doc = "warn"
-panic_in_result_fn = "warn"
-exhaustive_enums = "warn"
-
-todo = "warn"
-dbg_macro = "warn"
+[profile.release]
+opt-level = 3

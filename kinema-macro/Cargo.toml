@@ -1,0 +1,20 @@
+[package]
+name = "kinema-macro"
+version = "0.1.0"
+edition = "2024"
+description = ""
+readme = "README.md"
+license = "AGPL-3.0"
+repository = "https://github.com/RattlingJester/kinema.git"
+keywords = ["kinematics", "embedded"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+nalgebra = { version = "0.34.2", default-features = false, features = ["libm"] }
+
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full"] }
+urdf-rs = "0.9.0" 

@@ -1,0 +1,120 @@
+<?xml version="1.0"?>
+<robot name="robot">
+    <link name="base_link">
+        <visual>
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 3.14 -1.57" />
+            <geometry>
+                <mesh filename="resources/mesh/base_link.glb" scale="1000.0 1000.0 1000.0" />
+            </geometry>
+        </visual>
+    </link>
+
+    <link name="link_1">
+        <visual>
+            <origin xyz="0.071 0.0 0.212" rpy="1.57 0.0 1.57" />
+            <geometry>
+                <mesh filename="resources/mesh/link_1.glb" scale="1000.0 1000.0 1000.0" />
+            </geometry>
+        </visual>
+    </link>
+
+    <joint name="joint_1" type="revolute">
+        <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+        <parent link="base_link" />
+        <child link="link_1" />
+        <axis xyz="0.0 0.0 1.0" />
+        <limit lower="-180.0" upper="180.0" effort="30.0" velocity="31.41" />
+    </joint>
+
+    <link name="link_2">
+        <visual>
+            <origin xyz="0.0 0.0 -0.096" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="resources/mesh/link_2.glb" scale="1000.0 1000.0 1000.0" />
+            </geometry>
+        </visual>
+    </link>
+
+    <joint name="joint_2" type="revolute">
+        <origin xyz="0.071 0.0 0.292" rpy="1.57 0.0 0.0" />
+        <parent link="link_1" />
+        <child link="link_2" />
+        <axis xyz="0.0 0.0 1.0" />
+        <limit lower="-145.0" upper="90.0" effort="25.0" velocity="6.28" />
+    </joint>
+
+    <link name="link_3">
+        <visual>
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 1.57 0.0" />
+            <geometry>
+                <mesh filename="resources/mesh/link_3.glb" scale="1000.0 1000.0 1000.0" />
+            </geometry>
+        </visual>
+    </link>
+
+    <joint name="joint_3" type="revolute">
+        <origin xyz="0.0 0.295 0.0" rpy="0.0 0.0 0.0" />
+        <parent link="link_2" />
+        <child link="link_3" />
+        <axis xyz="0.0 0.0 1.0" />
+        <limit lower="-65.0" upper="145.0" effort="1000.0" velocity="6.28" />
+    </joint>
+
+    <link name="link_4">
+        <visual>
+            <origin xyz="0.0 0.0 -0.185" rpy="0.0 -1.57 0.0" />
+            <geometry>
+                <mesh filename="resources/mesh/link_4.glb" scale="1000.0 1000.0 1000.0" />
+            </geometry>
+        </visual>
+    </link>
+
+    <joint name="joint_4" type="revolute">
+        <origin xyz="0.255 0.0 0.0" rpy="0.0 1.57 0.0" />
+        <parent link="link_3" />
+        <child link="link_4" />
+        <axis xyz="0.0 0.0 1.0" />
+        <limit lower="-360.0" upper="360.0" effort="2.0" velocity="11" />
+    </joint>
+
+    <link name="link_5">
+        <visual>
+            <origin xyz="0.045 0.0 0.0" rpy="0.0 -1.57 0.0" />
+            <geometry>
+                <mesh filename="resources/mesh/link_5.glb" scale="1000.0 1000.0 1000.0" />
+            </geometry>
+        </visual>
+    </link>
+
+    <joint name="joint_5" type="revolute">
+        <origin xyz="0.0 0.0 0.0" rpy="0.0 -1.57 0.0" />
+        <parent link="link_4" />
+        <child link="link_5" />
+        <axis xyz="0.0 0.0 1.0" />
+        <limit lower="-90.0" upper="90.0" effort="3.6" velocity="43.6" />
+    </joint>
+
+    <link name="link_6">
+        <visual>
+            <origin xyz="0.0 0.0 0.0515" rpy="-1.57 0.0 1.57" />
+            <geometry>
+                <mesh filename="resources/mesh/link_6.glb" scale="1000.0 1000.0 1000.0" />
+            </geometry>
+        </visual>
+    </link>
+
+    <joint name="joint_6" type="revolute">
+        <origin xyz="0.0 0.0 0.0" rpy="0.0 1.57 0.0" />
+        <parent link="link_5" />
+        <child link="link_6" />
+        <axis xyz="0.0 0.0 1.0" />
+        <limit lower="-360.0" upper="360.0" effort="0.125" velocity="15.7" />
+    </joint>
+
+    <link name="tool"/>
+    <joint name="tool_fixed" type="fixed">
+        <origin xyz="0.0 0.0 0.059" rpy="0.0 0.0 0.0"/>
+        <parent link="link_6" />
+        <child link="tool" />
+    </joint>
+</robot>

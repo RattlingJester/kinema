@@ -2,6 +2,7 @@
 name = "rust"
 
 [language-server.rust-analyzer.config]
-cargo = { features = [] }
+cargo = { features = ["urdf", "macro"] }
 rustfmt.rangeFormatting.enable = true
 rustfmt.extraArgs = ["+nightly"]
+files.excludeDirs = ["kinema/examples"]

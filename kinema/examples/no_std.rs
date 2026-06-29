@@ -1,4 +1,4 @@
-use std::f32::consts::{FRAC_PI_2, TAU};
+use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, TAU};
 
 use kinema::{
 	Isometry3, SVector, Translation3, Unit, UnitQuaternion, Vector3,
@@ -30,7 +30,6 @@ pub fn robot_chain() -> Chain<6, 8, f32> {
 	let base = Node {
 		parent:          None,
 		joint:           Joint {
-			name:       "base_link".try_into().unwrap(),
 			joint_type: JointType::Fixed,
 			pos:        0.0,
 			limits:     JointLimit::default(),
@@ -44,7 +43,6 @@ pub fn robot_chain() -> Chain<6, 8, f32> {
 	let j1 = Node {
 		parent:          Some(0),
 		joint:           Joint {
-			name:       "joint_1".try_into().unwrap(),
 			joint_type: revolute_z(),
 			pos:        0.0,
 			limits:     deg_lim(-180.0, 180.0, 30.0, 31.41),
@@ -58,7 +56,6 @@ pub fn robot_chain() -> Chain<6, 8, f32> {
 	let j2 = Node {
 		parent:          Some(1),
 		joint:           Joint {
-			name:       "joint_2".try_into().unwrap(),
 			joint_type: revolute_z(),
 			pos:        0.0,
 			limits:     deg_lim(-145.0, 90.0, 25.0, TAU),
@@ -72,7 +69,6 @@ pub fn robot_chain() -> Chain<6, 8, f32> {
 	let j3 = Node {
 		parent:          Some(2),
 		joint:           Joint {
-			name:       "joint_3".try_into().unwrap(),
 			joint_type: revolute_z(),
 			pos:        0.0,
 			limits:     deg_lim(-65.0, 145.0, 1_000.0, TAU),
@@ -86,7 +82,6 @@ pub fn robot_chain() -> Chain<6, 8, f32> {
 	let j4 = Node {
 		parent:          Some(3),
 		joint:           Joint {
-			name:       "joint_4".try_into().unwrap(),
 			joint_type: revolute_z(),
 			pos:        0.0,
 			limits:     deg_lim(-360.0, 360.0, 2.0, 11.0),
@@ -100,7 +95,6 @@ pub fn robot_chain() -> Chain<6, 8, f32> {
 	let j5 = Node {
 		parent:          Some(4),
 		joint:           Joint {
-			name:       "joint_5".try_into().unwrap(),
 			joint_type: revolute_z(),
 			pos:        0.0,
 			limits:     deg_lim(-90.0, 90.0, 3.6, 43.6),
@@ -114,7 +108,6 @@ pub fn robot_chain() -> Chain<6, 8, f32> {
 	let j6 = Node {
 		parent:          Some(5),
 		joint:           Joint {
-			name:       "joint_6".try_into().unwrap(),
 			joint_type: revolute_z(),
 			pos:        0.0,
 			limits:     deg_lim(-360.0, 360.0, 0.125, 15.7),
@@ -128,7 +121,6 @@ pub fn robot_chain() -> Chain<6, 8, f32> {
 	let tool = Node {
 		parent:          Some(6),
 		joint:           Joint {
-			name:       "tool_fixed".try_into().unwrap(),
 			joint_type: JointType::Fixed,
 			pos:        0.0,
 			limits:     JointLimit::default(),
@@ -146,9 +138,7 @@ pub fn robot_chain() -> Chain<6, 8, f32> {
 fn main() {
 	let mut chain = robot_chain();
 
-	chain
-		.set_joint_positions(SVector::from([0.0, FRAC_PI_2, 0.0, 0.0, 0.0, 0.0]))
-		.unwrap();
+	chain.set_joint_positions_clamped(SVector::from([0.0, FRAC_PI_4, 0.0, 0.0, 0.0, 0.0]));
 	chain.update_transforms();
 
 	println!("TCP position = {}", chain.end_transform());

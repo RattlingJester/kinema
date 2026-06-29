@@ -1,8 +1,5 @@
 use nalgebra::{Isometry3, RealField, Translation3, Unit, UnitQuaternion, Vector3};
 
-#[cfg(not(feature = "std"))]
-use crate::MAX_NAME_LEN;
-
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct JointLimit<T: RealField> {
@@ -27,8 +24,6 @@ pub enum JointType<T: RealField> {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug)]
 pub struct Joint<T: RealField> {
-	#[cfg(not(feature = "std"))]
-	pub name:       heapless::String<MAX_NAME_LEN>,
 	#[cfg(feature = "std")]
 	pub name:       String,
 	pub joint_type: JointType<T>,

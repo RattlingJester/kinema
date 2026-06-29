@@ -1,0 +1,35 @@
+[package]
+name = "kinema"
+version = "0.3.0"
+edition = "2024"
+description = "no_std robot kinematics library for bare-metal embedded systems."
+readme = "README.md"
+license = "AGPL-3.0"
+repository = "https://github.com/RattlingJester/kinema.git"
+keywords = ["kinematics", "embedded"]
+
+[dependencies]
+kinema-macro = { path = "../kinema-macro", optional = true }
+
+defmt = { version = "1.0.1", optional = true }
+urdf-rs = { version = "0.9.0", optional = true }
+
+thiserror = { version = "2.0.17", default-features = false }
+nalgebra = { version = "0.34.2", default-features = false, features = ["libm"] }
+simba = { version = "0.9.1", default-features = false, features = ["libm"] }
+
+[features]
+default = []
+std = []
+defmt = ["dep:defmt", "nalgebra/defmt"]
+urdf = ["dep:urdf-rs", "visuals"]
+visuals = ["std"]
+macro = ["dep:kinema-macro"]
+
+[[example]]
+name = "no_std"
+required-features = []
+
+[[example]]
+name = "macro"
+required-features = ["macro"]

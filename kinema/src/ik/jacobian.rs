@@ -83,6 +83,7 @@ impl<const J: usize, T: RealField + SubsetOf<f64> + Copy> Default for JacobianIK
 }
 
 impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS, T> {
+	#[allow(clippy::too_many_arguments)]
 	pub fn new(
 		allowable_error_dist: T,
 		allowable_error_angle: T,
@@ -171,7 +172,7 @@ impl<const JOINTS: usize, T: RealField + SubsetOf<f64> + Copy> JacobianIK<JOINTS
 		}
 
 		let jacobi_pinv_6x6 = v_t.transpose() * s_pinv * u.transpose();
-		let d_q_weighted_6 = &jacobi_pinv_6x6 * &err;
+		let d_q_weighted_6 = jacobi_pinv_6x6 * err;
 
 		let mut d_q = SVector::<T, JOINTS>::zeros();
 		for i in 0..DOF {

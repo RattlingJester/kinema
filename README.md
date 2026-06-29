@@ -9,9 +9,7 @@ Provides forward kinematics and Jacobian inverse kinematics for serial-chain rob
 
 # TODO
 
-* Try to implement URDF parsing in `no_std` environment and get rid of urdf-rs dependency;
-
-* Get rid of `heapless` dependecy;
+* Try to implement URDF parsing in `no_std` environment and get rid of `urdf-rs` dependency;
 
 * Write proper docs and provide examples;
 

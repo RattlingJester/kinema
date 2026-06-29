@@ -1,4 +1,4 @@
-#![doc = include_str!("../README.md")]
+#![doc = include_str!("../../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub mod ik;
@@ -11,9 +11,6 @@ pub mod visual;
 pub use nalgebra::{
 	Isometry3, SMatrix, SVector, Translation3, Unit, UnitQuaternion, Vector3, distance,
 };
-
-#[cfg(not(feature = "std"))]
-pub(crate) const MAX_NAME_LEN: usize = 32;
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug, thiserror::Error)]
@@ -31,7 +28,10 @@ pub enum Error {
 	#[error("Jacobian error")]
 	MathError,
 	#[error(
-		"Inverse kinematics not converged.\nTries: {tries},\npos_diff: {pos_diff},\nrot_diff: {rot_diff}"
+		"Inverse kinematics not converged.
+		Tries: {tries},
+		pos_diff: {pos_diff},
+		rot_diff: {rot_diff}"
 	)]
 	IkNotConverged {
 		tries:    usize,
