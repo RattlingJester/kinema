@@ -42,12 +42,12 @@ pub fn load_urdf(input: TokenStream) -> TokenStream {
 
 	let identity_iso = make_isometry_tokens(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
 	node_tokens.push(quote! {
-		Node {
+		kinema::node::Node {
 			parent: None,
-			joint: Joint {
-				joint_type: JointType::Fixed,
+			joint: kinema::joint::Joint {
+				joint_type: kinema::joint::JointType::Fixed,
 				pos: 0.0,
-				limits: JointLimit { min: 0.0, max: 0.0, effort: 0.0, velocity: 0.0 },
+				limits: kinema::joint::JointLimit { min: 0.0, max: 0.0, effort: 0.0, velocity: 0.0 },
 				origin: #identity_iso,
 			},
 			world_transform: #identity_iso,
@@ -59,14 +59,14 @@ pub fn load_urdf(input: TokenStream) -> TokenStream {
 		let parent_token = quote! { Some(#i) };
 
 		let joint_type_token = match joint.joint_type {
-			urdf_rs::JointType::Fixed => quote! { JointType::Fixed },
+			urdf_rs::JointType::Fixed => quote! { kinema::joint::JointType::Fixed },
 			urdf_rs::JointType::Revolute | urdf_rs::JointType::Continuous => {
 				movable_indices.push(current_node_idx);
 				let ax = joint.axis.xyz[0] as f32;
 				let ay = joint.axis.xyz[1] as f32;
 				let az = joint.axis.xyz[2] as f32;
 				quote! {
-					JointType::Revolute {
+					kinema::joint::JointType::Revolute {
 						axis: nalgebra::Unit::new_unchecked(nalgebra::Vector3::new(#ax, #ay, #az))
 					}
 				}
@@ -79,7 +79,7 @@ pub fn load_urdf(input: TokenStream) -> TokenStream {
 			let max = joint.limit.upper as f32;
 			let effort = joint.limit.effort as f32;
 			let vel = joint.limit.velocity as f32;
-			quote! { JointLimit { min: #min, max: #max, effort: #effort, velocity: #vel } }
+			quote! { kinema::joint::JointLimit { min: #min, max: #max, effort: #effort, velocity: #vel } }
 		};
 
 		let x = joint.origin.xyz[0] as f32;
@@ -92,9 +92,9 @@ pub fn load_urdf(input: TokenStream) -> TokenStream {
 		let origin_iso = make_isometry_tokens(x, y, z, roll, pitch, yaw);
 
 		node_tokens.push(quote! {
-			Node {
+			kinema::node::Node {
 				parent: #parent_token,
-				joint: Joint {
+				joint: kinema::joint::Joint {
 					joint_type: #joint_type_token,
 					pos: 0.0,
 					limits: #limit_token,
@@ -112,7 +112,7 @@ pub fn load_urdf(input: TokenStream) -> TokenStream {
 	let expanded = quote! {
 		{
 			const _: &[u8] = include_bytes!(#path_str);
-			Chain::<#num_movable, #num_nodes, f32>::new(
+			kinema::kinematics::Chain::<#num_movable, #num_nodes, f32>::new(
 				[ #(#node_tokens),* ],
 				[ #(#movable_indices),* ],
 			)
