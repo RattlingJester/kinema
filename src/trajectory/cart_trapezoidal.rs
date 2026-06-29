@@ -66,8 +66,6 @@ impl<
 			let target = Self::interpolate(&start, &end, s);
 
 			if let Err(e) = ik.solve(chain, target) {
-				#[cfg(feature = "debug")]
-				eprintln!("IK failed at waypoint {i}/{PATH_LEN}: {e:?}");
 				chain.set_joint_positions(orig_pos)?;
 				chain.update_transforms();
 				return Err(e);
