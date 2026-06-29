@@ -4,6 +4,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{LitStr, parse_macro_input};
 
+/// Experimental macro to parse URDF at compile time and output a Chain so you don't have to do it manually in `no_std` environment. Tested only with revolute joints
 #[proc_macro]
 pub fn load_urdf(input: TokenStream) -> TokenStream {
 	let input_lit = parse_macro_input!(input as LitStr);
@@ -60,7 +61,7 @@ pub fn load_urdf(input: TokenStream) -> TokenStream {
 
 		let joint_type_token = match joint.joint_type {
 			urdf_rs::JointType::Fixed => quote! { kinema::joint::JointType::Fixed },
-			urdf_rs::JointType::Revolute | urdf_rs::JointType::Continuous => {
+			urdf_rs::JointType::Revolute | urdf_rs::JointType::Prismatic => {
 				movable_indices.push(current_node_idx);
 				let ax = joint.axis.xyz[0] as f32;
 				let ay = joint.axis.xyz[1] as f32;
@@ -111,7 +112,9 @@ pub fn load_urdf(input: TokenStream) -> TokenStream {
 	let path_str = urdf_path.to_str().expect("Valid UTF-8 path");
 	let expanded = quote! {
 		{
+			// HACK so Cargo would track changes to urdf file and rerun the macro if it is changed. Compiler will strip it out if you enable optimizations
 			const _: &[u8] = include_bytes!(#path_str);
+
 			kinema::kinematics::Chain::<#num_movable, #num_nodes, f32>::new(
 				[ #(#node_tokens),* ],
 				[ #(#movable_indices),* ],
