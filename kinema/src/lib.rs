@@ -12,6 +12,9 @@ pub use nalgebra::{
 	Isometry3, SMatrix, SVector, Translation3, Unit, UnitQuaternion, Vector3, distance,
 };
 
+#[cfg(feature = "macro")]
+pub use kinema_macro::load_urdf;
+
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
