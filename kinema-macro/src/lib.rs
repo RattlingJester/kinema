@@ -29,12 +29,12 @@ pub fn load_urdf(input: TokenStream) -> TokenStream {
 		let qw = coords.w;
 
 		quote! {
-			nalgebra::Isometry3 {
-				translation: nalgebra::Translation3 {
-					vector: nalgebra::Vector3::new(#x, #y, #z),
+			kinema::Isometry3 {
+				translation: kinema::Translation3 {
+					vector: kinema::Vector3::new(#x, #y, #z),
 				},
-				rotation: nalgebra::Unit::new_unchecked(
-					nalgebra::Quaternion::new(#qw, #qx, #qy, #qz)
+				rotation: kinema::Unit::new_unchecked(
+					kinema::Quaternion::new(#qw, #qx, #qy, #qz)
 				),
 			}
 		}
@@ -67,7 +67,7 @@ pub fn load_urdf(input: TokenStream) -> TokenStream {
 				let az = joint.axis.xyz[2] as f32;
 				quote! {
 					kinema::joint::JointType::Revolute {
-						axis: nalgebra::Unit::new_unchecked(nalgebra::Vector3::new(#ax, #ay, #az))
+						axis: kinema::Unit::new_unchecked(kinema::Vector3::new(#ax, #ay, #az))
 					}
 				}
 			}
