@@ -2,7 +2,7 @@
 name = "kinema-macro"
 version = "0.1.0"
 edition = "2024"
-description = ""
+description = "Macro crate for kinema library"
 readme = false
 license = "AGPL-3.0"
 repository = "https://github.com/RattlingJester/kinema.git"
