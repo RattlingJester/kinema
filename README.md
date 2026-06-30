@@ -7,9 +7,16 @@ The library is early in developlent, so many features are not documented and the
 
 Provides forward kinematics and Jacobian inverse kinematics for serial-chain robot arms.
 
+# Cargo features:
+
+* `std` - use standard library;
+* `defmt` - derive `defmt::Format` for embedded logging;
+* `urdf` - URDF file parsing using `urdf-rs` crate by openrr works only with `std`;
+* `macro` - experimental macro to parse URDF at compile time and generate corresponding Chain similar to `no_std` example below. Great for embedded targets.
+
 # TODO
 
-* Try to implement URDF parsing in `no_std` environment and get rid of `urdf-rs` dependency;
+* Implement the rest of the URDF joint types (only revolute, fixed, and prismatic are implemented at the moment);
 
 * Write proper docs and provide examples;
 
@@ -21,7 +28,7 @@ Building it like that is kinda tedious, maybe I'll improve the API later.
 
 ```rust
 pub fn my_robot() -> Chain<2, 4, f32> {
-   	let iso = |x, y, z, roll, pitch, yaw| {
+   	let iso = |x, y, z, roll, pitch, yaw| { f
   		Isometry3::from_parts(
  			Translation3::new(x, y, z),
  			UnitQuaternion::from_euler_angles(roll, pitch, yaw),
@@ -112,4 +119,12 @@ single forward pass without recursion.
 URDF parsing requires standard library and enabled "urdf" feature
 ```rust
 let mut chain = Chain::from_urdf("robot.urdf").unwrap();
+```
+
+### load_urdf macro:
+
+Cargo feature `macro` provides experimental `load_urdf` macro which parses provided URDF file at compile time and generates Chain. Tested only with revolute and fixed joints.
+
+```rust
+let mut chain = load_urdf!("../robot.urdf");
 ```
